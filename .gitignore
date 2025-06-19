@@ -1,0 +1,6 @@
+node_modules
+.env
+.env.example
+hash-password.js
+hash-password.ts
+hash-password.tsx
