@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SnackbarProvider } from 'notistack';
 import { Box, CircularProgress } from '@mui/material';
 import { AuthProvider, useAuth } from './services/auth';
 import DoctorDashboard from './pages/DoctorDashboard';
@@ -61,7 +62,15 @@ function App() {
       <AuthProvider>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <Navbar />
+          <SnackbarProvider 
+            maxSnack={3}
+            anchorOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            autoHideDuration={3000}
+          >
+            <Navbar />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route 
@@ -88,8 +97,17 @@ function App() {
                 </ProtectedRoute>
               } 
             />
+            <Route 
+              path="/appointments/new" 
+              element={
+                <ProtectedRoute>
+                  <AppointmentCalendar mode="create" />
+                </ProtectedRoute>
+              } 
+            />
             <Route path="/" element={<Navigate to="/appointments" replace />} />
           </Routes>
+          </SnackbarProvider>
         </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>

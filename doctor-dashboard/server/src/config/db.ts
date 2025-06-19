@@ -1,21 +1,25 @@
-import mongoose from 'mongoose';
+import { PrismaClient } from '@prisma/client';
+
+export const prisma = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+});
 
 export const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI as string);
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    await prisma.$connect();
+    console.log('Database connected successfully');
   } catch (error) {
-    console.error(`Error: ${error}`);
+    console.error('Database connection error:', error);
     process.exit(1);
   }
 };
 
 export const closeDB = async () => {
   try {
-    await mongoose.connection.close();
-    console.log('MongoDB connection closed');
+    await prisma.$disconnect();
+    console.log('Database connection closed');
   } catch (error) {
-    console.error('Error closing MongoDB connection:', error);
+    console.error('Error closing database connection:', error);
     throw error;
   }
 };

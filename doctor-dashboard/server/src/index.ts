@@ -39,13 +39,13 @@ app.use(cors({
 
 // Default configuration
 const config = {
-  mongoURI: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/doctor-dashboard',
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/doctor_dashboard',
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-key',
   sessionSecret: process.env.SESSION_SECRET || 'dev-session-secret',
   nodeEnv: process.env.NODE_ENV || 'development'
 };
 
-console.log('Using MongoDB URI:', config.mongoURI);
+console.log('Using database URL:', config.databaseUrl);
 
 // Middleware
 app.use(express.json());

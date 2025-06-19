@@ -1,10 +1,19 @@
-import { Types } from 'mongoose';
-import { IDoctor } from '../models/Doctor';
+// Custom type for UserRole
+type UserRole = 'ADMIN' | 'DOCTOR' | 'PATIENT' | 'NURSE' | 'PHARMACIST' | 'STAFF';
 
 declare global {
   namespace Express {
     interface Request {
-      doctor?: IDoctor & { _id: Types.ObjectId };
+      user?: {
+        id: string;
+        role: UserRole;
+        [key: string]: any;
+      };
+      doctor?: {
+        id: string;
+        role: UserRole;
+        [key: string]: any;
+      };
     }
   }
 }

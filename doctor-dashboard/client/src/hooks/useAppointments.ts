@@ -105,11 +105,25 @@ export const useAppointments = () => {
     },
   });
 
+  const createAppointment = useMutation({
+    mutationFn: async (appointmentData: any) => {
+      return await apiService.post('/appointments', appointmentData);
+    },
+    onSuccess: () => {
+      // Invalidate and refetch appointments after successful creation
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    },
+    onError: (error) => {
+      console.error('Failed to create appointment:', error);
+    }
+  });
+
   return {
     appointments,
     isLoading,
     isError,
     error,
     updateAppointmentStatus,
+    createAppointment,
   };
 };

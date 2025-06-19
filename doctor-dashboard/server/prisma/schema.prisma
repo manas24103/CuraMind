@@ -1,0 +1,98 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String        @id @default(uuid())
+  email                 String        @unique
+  name                  String?
+  password              String
+  role                  UserRole      @default(DOCTOR)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  doctorProfile         DoctorProfile?
+  patientProfile        PatientProfile?
+  createdPrescriptions  Prescription[] @relation("PrescriptionCreator")
+  updatedPrescriptions  Prescription[] @relation("PrescriptionUpdater")
+  doctorPatterns        DoctorPattern[]
+}
+
+model DoctorProfile {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization String?
+  licenseNumber  String?
+  phone         String?
+  bio           String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PatientProfile {
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth  DateTime?
+  bloodGroup   String?
+  allergies    String?
+  address      String?
+  phone        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Prescription {
+  id          String     @id @default(uuid())
+  patientId   String
+  patient     User       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId    String
+  doctor      User       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  content     String
+  status      PrescriptionStatus @default(DRAFT)
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  createdBy   String
+  creator     User       @relation("PrescriptionCreator", fields: [createdBy], references: [id])
+  updatedBy   String?
+  updater     User?      @relation("PrescriptionUpdater", fields: [updatedBy], references: [id])
+}
+
+model DoctorPattern {
+  id          String   @id @default(uuid())
+  doctorId    String
+  doctor      User     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  pattern     String
+  frequency   Int      @default(1)
+  lastUsed    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([doctorId, pattern])
+}
+
+enum UserRole {
+  ADMIN
+  DOCTOR
+  PATIENT
+  NURSE
+  PHARMACIST
+  STAFF
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  FINAL
+  ARCHIVED
+  CANCELLED
+}

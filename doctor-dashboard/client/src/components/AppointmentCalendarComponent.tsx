@@ -1,4 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useSnackbar } from 'notistack';
+import apiService from '../services/api.service';
 import { 
   Box, 
   Typography, 
@@ -13,7 +16,16 @@ import {
   Avatar,
   TextField,
   useMediaQuery,
-  Theme
+  Theme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  InputLabel,
+  MenuItem,
+  FormControl,
+  Select,
+  SelectChangeEvent
 } from '@mui/material';
 import { format } from 'date-fns';
 import { useAppointments } from '../hooks/useAppointments';
@@ -52,16 +64,127 @@ type PopulatedAppointment = Omit<Appointment, 'patient' | 'doctor'> & {
 // Type for the status update function
 type UpdateStatusFunction = (id: string, status: Appointment['status']) => void;
 
-const AppointmentCalendarComponent = () => {
+interface AppointmentFormData {
+  patientName: string;
+  date: string;
+  time: string;
+  type: string;
+  notes: string;
+}
+
+interface AppointmentCalendarProps {
+  mode?: 'view' | 'create';
+}
+
+const AppointmentCalendarComponent: React.FC<AppointmentCalendarProps> = ({ mode = 'view' }) => {
+  const navigate = useNavigate();
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'));
-  const [showDatePicker, setShowDatePicker] = React.useState(false);
-  const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [formErrors, setFormErrors] = useState<Partial<AppointmentFormData>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { enqueueSnackbar } = useSnackbar();
+  
+  const [formData, setFormData] = useState<AppointmentFormData>({
+    patientName: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    time: '09:00',
+    type: 'checkup',
+    notes: ''
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const validateForm = (): boolean => {
+    const errors: Partial<AppointmentFormData> = {};
+    
+    if (!formData.patientName.trim()) {
+      errors.patientName = 'Patient name is required';
+    }
+    
+    if (!formData.date) {
+      errors.date = 'Date is required';
+    } else if (new Date(formData.date) < new Date(new Date().setHours(0, 0, 0, 0))) {
+      errors.date = 'Date cannot be in the past';
+    }
+    
+    if (!formData.time) {
+      errors.time = 'Time is required';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const resetForm = () => {
+    setFormData({
+      patientName: '',
+      date: format(new Date(), 'yyyy-MM-dd'),
+      time: '09:00',
+      type: 'checkup',
+      notes: ''
+    });
+    setFormErrors({});
+  };
+
+  const handleCreateAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      enqueueSnackbar('Please fix the form errors', { variant: 'error' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      const appointmentData = {
+        patientName: formData.patientName,
+        date: formData.date,
+        time: formData.time,
+        type: formData.type,
+        notes: formData.notes,
+        status: 'scheduled' as const
+      };
+      
+      // Call the API to create the appointment
+      const response = await apiService.appointments.create(appointmentData);
+      
+      if (response.success) {
+        enqueueSnackbar('Appointment created successfully!', { variant: 'success' });
+        resetForm();
+        navigate('/appointments');
+      } else {
+        throw new Error(response.message || 'Failed to create appointment');
+      }
+    } catch (error: any) {
+      console.error('Error creating appointment:', error);
+      enqueueSnackbar(error.message || 'Failed to create appointment', { variant: 'error' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const { 
     appointments, 
     isLoading, 
     isError, 
-    updateAppointmentStatus 
+    updateAppointmentStatus,
+    createAppointment
   } = useAppointments();
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,6 +228,122 @@ const AppointmentCalendarComponent = () => {
     );
   }
 
+  // Effect to show error if there are any form errors
+  useEffect(() => {
+    if (Object.keys(formErrors).length > 0) {
+      enqueueSnackbar('Please fix the form errors', { variant: 'error' });
+    }
+  }, [formErrors, enqueueSnackbar]);
+
+  if (mode === 'create') {
+    return (
+      <Box sx={{ p: 3, maxWidth: 600, margin: '0 auto' }}>
+        <Typography variant="h5" gutterBottom>Schedule New Appointment</Typography>
+        <form onSubmit={handleCreateAppointment}>
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Patient Name"
+                name="patientName"
+                value={formData.patientName}
+                onChange={handleInputChange}
+                error={!!formErrors.patientName}
+                helperText={formErrors.patientName}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Date"
+                type="date"
+                name="date"
+                value={formData.date}
+                onChange={handleInputChange}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+                error={!!formErrors.date}
+                helperText={formErrors.date}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Time"
+                type="time"
+                name="time"
+                value={formData.time}
+                onChange={handleInputChange}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+                inputProps={{
+                  step: 900, // 15 min
+                }}
+                error={!!formErrors.time}
+                helperText={formErrors.time}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel id="appointment-type-label">Appointment Type</InputLabel>
+                <Select
+                  labelId="appointment-type-label"
+                  name="type"
+                  value={formData.type}
+                  label="Appointment Type"
+                  onChange={handleSelectChange}
+                  required
+                >
+                  <MenuItem value="checkup">Checkup</MenuItem>
+                  <MenuItem value="followup">Follow-up</MenuItem>
+                  <MenuItem value="consultation">Consultation</MenuItem>
+                  <MenuItem value="emergency">Emergency</MenuItem>
+                  <MenuItem value="other">Other</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notes"
+                name="notes"
+                value={formData.notes}
+                onChange={handleInputChange}
+                multiline
+                rows={4}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Box display="flex" justifyContent="flex-end" gap={2}>
+                <Button
+                  variant="outlined"
+                  onClick={() => window.history.back()}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  disabled={isSubmitting}
+                  startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
+                >
+                  {isSubmitting ? 'Scheduling...' : 'Schedule Appointment'}
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </form>
+      </Box>
+    );
+  }
+
   const todayAppointments = getFilteredAppointments(appointments as PopulatedAppointment[], selectedDate);
 
   return (
@@ -113,6 +352,14 @@ const AppointmentCalendarComponent = () => {
         <Typography variant="h5" component="h1">
           Appointments
         </Typography>
+        <Button 
+          variant="contained" 
+          color="primary"
+          onClick={() => navigate('/appointments/new')}
+          sx={{ ml: 2 }}
+        >
+          New Appointment
+        </Button>
         <Box>
           {showDatePicker ? (
             <TextField

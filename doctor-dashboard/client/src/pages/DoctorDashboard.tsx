@@ -1,62 +1,63 @@
-import React, { useState, useEffect, FC, MouseEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { User } from '../types/user';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Topbar from '../components/Topbar';
 import { 
   Box, 
   Grid, 
   Card, 
   CardContent, 
   Typography, 
-  useTheme, 
-  useMediaQuery, 
-  IconButton, 
-  Close, 
-  List, 
-  ListItem, 
-  ListItemIcon, 
-  ListItemText, 
-  Collapse, 
-  ExpandMore,
+  CssBaseline,
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Collapse,
+  useTheme,
+  useMediaQuery,
   Divider,
   ListItemButton,
-  Paper,
-  Avatar,
-  InputBase,
-  Button,
-  Menu,
-  Toolbar
+  IconButton,
 } from '@mui/material';
 import { 
-  Dashboard as DashboardIcon, 
-  Person as PersonIcon, 
-  People as PeopleIcon, 
-  EventNote as EventNoteIcon, 
-  EventAvailable as EventAvailableIcon, 
-  CheckCircle as CheckCircleIcon, 
-  Cancel as CancelIcon, 
-  Description as DescriptionIcon, 
-  Create as CreateIcon, 
-  Settings as SettingsIcon, 
-  ExitToApp as ExitToAppIcon, 
-  Lock as LockIcon, 
-  Build as BuildIcon, 
-  RateReview as RateReviewIcon, 
-  Add as AddIcon, 
+  Person as PersonIcon,
+  PersonAdd as PersonAddIcon,
+  Event as EventIcon,
+  EventAvailable as EventAvailableIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
+  EventNote as EventNoteIcon,
+  Dashboard as DashboardIcon,
+  Add as AddIcon,
   Delete as DeleteIcon,
-  PersonAdd as PersonAddIcon
+  Description as DescriptionIcon,
+  People as PeopleIcon,
+  CheckCircle as CheckCircleIcon,
+  Create as CreateIcon,
+  Settings as SettingsIcon,
+  Lock as LockIcon,
+  Build as BuildIcon,
+  RateReview as RateReviewIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ExpandMore as ExpandMoreIcon,
+  ChevronRight as ChevronRightIcon,
+  Logout as LogoutIcon,
+  Close as CloseIcon,
+  Cancel as CancelIcon,
+  Help as HelpIcon,
 } from '@mui/icons-material';
-import { COLORS } from '../constants/colors';
-import { stats } from '../data/stats';
-import { appointmentsData } from '../data/appointments';
-import { patientVisitData } from '../data/patientVisits';
-import { Cell } from 'recharts';
 
-interface MenuItem {
+
+
+
+
+interface IMenuItem {
   text: string;
-  icon: React.ReactElement;
+  icon: React.ReactNode;
   path?: string;
   onClick?: () => void;
-  children?: MenuItem[];
+  children?: IMenuItem[];
 }
 
 interface SidebarProps {
@@ -65,135 +66,158 @@ interface SidebarProps {
   onMobileClose: () => void;
 }
 
-const Sidebar: FC<SidebarProps> = ({ onLogout, isMobileOpen, onMobileClose }: SidebarProps) => {
-  const [openDoctors, setOpenDoctors] = useState(false);
-  const [openPatients, setOpenPatients] = useState(false);
-  const [openAppointments, setOpenAppointments] = useState(false);
-  const [openPrescriptions, setOpenPrescriptions] = useState(false);
-  const [openSettings, setOpenSettings] = useState(false);
+const Sidebar = ({ onLogout, isMobileOpen, onMobileClose }: SidebarProps) => {
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const navigate = useNavigate();
-
-  const handleClick = (menu: string) => {
-    switch(menu) {
-      case 'doctors':
-        setOpenDoctors(!openDoctors);
-        break;
-      case 'patients':
-        setOpenPatients(!openPatients);
-        break;
-      case 'appointments':
-        setOpenAppointments(!openAppointments);
-        break;
-      case 'prescriptions':
-        setOpenPrescriptions(!openPrescriptions);
-        break;
-      case 'settings':
-        setOpenSettings(!openSettings);
-        break;
-      default:
-        break;
-    }
+  const [openMenus, setOpenMenus] = React.useState<{[key: string]: boolean}>({});
+  
+  const handleMenuClick = (menu: string) => {
+    setOpenMenus(prev => ({
+      ...prev,
+      [menu]: !prev[menu]
+    }));
   };
-
-  const menuItems: MenuItem[] = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-    
-    // Doctor Section
+  
+  const menuItems: IMenuItem[] = [
     { 
-      text: 'Doctor', 
-      icon: <PersonIcon />, 
-      onClick: () => handleClick('doctors'),
-      children: [
-        { text: 'All Doctors', icon: <PersonIcon />, path: '/doctors' },
-        { text: 'Add Doctor', icon: <AddIcon />, path: '/doctors/add' },
-        { text: 'Delete Doctor', icon: <DeleteIcon />, path: '/doctors/delete' },
-        { text: 'Doctor Profile', icon: <DescriptionIcon />, path: '/profile/doctor' },
-      ]
+      text: 'Dashboard', 
+      icon: <DashboardIcon />, 
+      path: '/dashboard' 
     },
-    
-    // Patient Section
-    { 
-      text: 'Patient', 
-      icon: <PeopleIcon />, 
-      onClick: () => handleClick('patients'),
-      children: [
-        { text: 'All Patients', icon: <PeopleIcon />, path: '/patients' },
-        { text: 'Medical History', icon: <DescriptionIcon />, path: '/patients/history' },
-        { text: 'Patient Feedback', icon: <RateReviewIcon />, path: '/patients/feedback' },
-      ]
-    },
-    
-    // Appointments Section
     { 
       text: 'Appointments', 
       icon: <EventNoteIcon />, 
-      onClick: () => handleClick('appointments'),
+      onClick: () => handleMenuClick('appointments'),
       children: [
-        { text: 'View Appointments', icon: <EventNoteIcon />, path: '/appointments' },
-        { text: 'Schedule Appointment', icon: <EventAvailableIcon />, path: '/appointments/schedule' },
-        { text: 'Completed Appointments', icon: <CheckCircleIcon />, path: '/appointments/completed' },
-        { text: 'Cancelled Appointments', icon: <CancelIcon />, path: '/appointments/cancelled' },
+        { 
+          text: 'View Appointments', 
+          icon: <EventAvailableIcon />, 
+          path: '/appointments' 
+        },
+        { 
+          text: 'Schedule New', 
+          icon: <AddIcon />, 
+          path: '/appointments/new' 
+        },
+        { 
+          text: 'Calendar View', 
+          icon: <EventIcon />, 
+          path: '/appointments/calendar' 
+        }
       ]
     },
-    
-    // Prescriptions Section
+    { 
+      text: 'Patients', 
+      icon: <PeopleIcon />, 
+      onClick: () => handleMenuClick('patients'),
+      children: [
+        { 
+          text: 'All Patients', 
+          icon: <PeopleIcon />, 
+          path: '/patients' 
+        },
+        { 
+          text: 'Add New Patient', 
+          icon: <PersonAddIcon />, 
+          path: '/patients/new' 
+        },
+        { 
+          text: 'Patient Records', 
+          icon: <DescriptionIcon />, 
+          path: '/patients/records' 
+        }
+      ]
+    },
     { 
       text: 'Prescriptions', 
       icon: <DescriptionIcon />, 
-      onClick: () => handleClick('prescriptions'),
+      onClick: () => handleMenuClick('prescriptions'),
       children: [
-        { text: 'All Prescriptions', icon: <DescriptionIcon />, path: '/prescriptions' },
-        { text: 'Write New Prescription', icon: <CreateIcon />, path: '/prescriptions/new' },
+        { 
+          text: 'All Prescriptions', 
+          icon: <DescriptionIcon />, 
+          path: '/prescriptions' 
+        },
+        { 
+          text: 'Create New', 
+          icon: <CreateIcon />, 
+          path: '/prescriptions/new' 
+        },
+        { 
+          text: 'Templates', 
+          icon: <RateReviewIcon />, 
+          path: '/prescriptions/templates' 
+        }
       ]
     },
-    
-    // Settings Section
     { 
       text: 'Settings', 
       icon: <SettingsIcon />, 
-      onClick: () => handleClick('settings'),
+      onClick: () => handleMenuClick('settings'),
       children: [
-        { text: 'Profile Settings', icon: <PersonIcon />, path: '/settings/profile' },
-        { text: 'Change Password', icon: <LockIcon />, path: '/settings/password' },
-        { text: 'System Preferences', icon: <BuildIcon />, path: '/settings/preferences' },
+        { 
+          text: 'Profile', 
+          icon: <PersonIcon />, 
+          path: '/settings/profile' 
+        },
+        { 
+          text: 'Account', 
+          icon: <SettingsIcon />, 
+          path: '/settings/account' 
+        },
+        { 
+          text: 'Security', 
+          icon: <LockIcon />, 
+          path: '/settings/security' 
+        },
+        { 
+          text: 'Preferences', 
+          icon: <BuildIcon />, 
+          path: '/settings/preferences' 
+        }
       ]
     },
-    
-    // Logout
-    { text: 'Logout', icon: <ExitToAppIcon />, onClick: onLogout },
-  ];
+    { 
+      text: 'Help & Support', 
+      icon: <HelpIcon />, 
+      path: '/help' 
+    },
+    { 
+      text: 'Logout', 
+      icon: <LogoutIcon />, 
+      onClick: onLogout
+    }];
 
-  const renderMenuItems = (items: MenuItem[]) => {
+  const renderMenuItems = (items: IMenuItem[]) => {
     return items.map((item) => {
       if (item.children) {
+        const menuKey = item.text.toLowerCase();
         return (
           <div key={item.text}>
-            <ListItem
-              button
-              onClick={item.onClick}
+            <ListItem 
+              button 
+              onClick={() => handleMenuClick(menuKey)}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
               <ListItemText primary={item.text} />
-              {item.onClick && <ExpandMore />}
+              {openMenus[menuKey] ? <ExpandMoreIcon /> : <ChevronRightIcon />}
             </ListItem>
-            <Collapse in={item.text === 'Doctor' ? openDoctors :
-                         item.text === 'Patient' ? openPatients :
-                         item.text === 'Appointments' ? openAppointments :
-                         item.text === 'Prescriptions' ? openPrescriptions :
-                         item.text === 'Settings' ? openSettings : false}>
+            <Collapse in={openMenus[menuKey]} timeout="auto" unmountOnExit>
               <List component="div" disablePadding>
                 {item.children.map((child) => (
-                  <ListItem
-                    button
-                    key={child.text}
+                  <ListItem 
+                    button 
+                    key={child.text} 
+                    sx={{ pl: 4 }}
                     onClick={() => {
                       if (child.path) {
                         navigate(child.path);
                         if (isMobile) {
                           onMobileClose();
                         }
+                      } else if (child.onClick) {
+                        child.onClick();
                       }
                     }}
                   >
@@ -216,6 +240,8 @@ const Sidebar: FC<SidebarProps> = ({ onLogout, isMobileOpen, onMobileClose }: Si
               if (isMobile) {
                 onMobileClose();
               }
+            } else if (item.onClick) {
+              item.onClick();
             }
           }}
         >
@@ -247,7 +273,7 @@ const Sidebar: FC<SidebarProps> = ({ onLogout, isMobileOpen, onMobileClose }: Si
       >
         <Typography variant="h6">Doctor Dashboard</Typography>
         <IconButton onClick={onMobileClose} sx={{ display: { sm: 'none' } }}>
-          <Close />
+          <CloseIcon />
         </IconButton>
       </Box>
       <List>
@@ -258,187 +284,220 @@ const Sidebar: FC<SidebarProps> = ({ onLogout, isMobileOpen, onMobileClose }: Si
 };
 
 const DoctorDashboard: React.FC = () => {
-};
-
-interface TopbarProps {
-  user: User | null;
-  onMenuClick: () => void;
-  onLogout: () => void;
-}
-
-const Topbar: FC<TopbarProps> = ({ user, onMenuClick, onLogout }) => {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  
-  const handleMenu = (event: MouseEvent<HTMLElement>): void => {
-    setAnchorEl(event.currentTarget);
-  };
-  
-  const handleClose = (): void => {
-    setAnchorEl(null);
-  };
-  
-  const handleLogoutClick = (): void => {
-    onLogout();
-    handleClose();
-  };
-  return (
-    <AppBar position="fixed" sx={{ ml: `${drawerWidth}px`, bgcolor: 'white', color: 'black', boxShadow: 1 }}>
-      <Toolbar>
-        <IconButton 
-          size="large" 
-          edge="start" 
-          color="inherit" 
-          aria-label="menu" 
-          onClick={onMenuClick}
-          sx={{ mr: 2, display: { sm: 'none' } }}
-        >
-          <MenuIcon />
-        </IconButton>
-        <Box sx={{ flexGrow: 1 }}>
-          <Paper component="form" sx={{ display: 'flex', alignItems: 'center', width: 300, bgcolor: '#f4f6fa', boxShadow: 0, pl: 1 }}>
-            <InputBase sx={{ ml: 1, flex: 1 }} placeholder="Search for..." inputProps={{ 'aria-label': 'search' }} />
-            <IconButton type="submit" sx={{ p: '10px' }} aria-label="search">
-              <SearchIcon />
-            </IconButton>
-          </Paper>
-        </Box>
-        <IconButton color="inherit">
-          <NotificationsIcon />
-        </IconButton>
-        <Box sx={{ ml: 2 }}>
-          <Button onClick={handleMenu} color="inherit" startIcon={<Avatar sx={{ width: 32, height: 32 }}>{user?.name?.[0] || '?'}</Avatar>}>
-            {user?.name || 'User'}
-          </Button>
-          <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
-            <MenuItem onClick={handleClose}>Profile</MenuItem>
-            <MenuItem onClick={handleClose}>Settings</MenuItem>
-            <MenuItem onClick={handleClose}>Activity Log</MenuItem>
-            <Divider />
-            <MenuItem onClick={handleLogoutClick}>Logout</MenuItem>
-          </Menu>
-        </Box>
-            </Box>
-            <List dense>
-              {[1, 2, 3].map((item) => (
-                <ListItem key={item} disablePadding sx={{ mb: 1 }}>
-                  <ListItemButton>
-                    <ListItemIcon><DescriptionIcon /></ListItemIcon>
-                    <ListItemText 
-                      primary={`Prescription #PR${1000 + item}`}
-                      secondary={`Patient: John Doe • ${item} day${item > 1 ? 's' : ''} ago`}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ p: 2, borderRadius: 2, boxShadow: 3 }}>
-            <Box display="flex" alignItems="center" mb={2}>
-              <EventNoteIcon color="primary" sx={{ mr: 1 }} />
-              <Typography variant="h6">Upcoming Appointments</Typography>
-            </Box>
-            <List dense>
-              {[1, 2, 3].map((item) => (
-                <ListItem key={item} disablePadding sx={{ mb: 1 }}>
-                  <ListItemButton>
-                    <ListItemIcon><EventNoteIcon /></ListItemIcon>
-                    <ListItemText 
-                      primary={`Appointment #AP${1000 + item}`}
-                      secondary={`Patient: Jane Smith • 10:00 AM`}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ p: 2, borderRadius: 2, boxShadow: 3 }}>
-            <Box display="flex" alignItems="center" mb={2}>
-              <PersonAddIcon color="primary" sx={{ mr: 1 }} />
-              <Typography variant="h6">Recently Added Patients</Typography>
-            </Box>
-            <List dense>
-              {[1, 2, 3].map((item) => (
-                <ListItem key={item} disablePadding sx={{ mb: 1 }}>
-                  <ListItemButton>
-                    <ListItemIcon><PersonAddIcon /></ListItemIcon>
-                    <ListItemText 
-                      primary={`Patient #${1000 + item}`}
-                      secondary={`Added: ${new Date().toLocaleDateString()}`}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Card>
-        </Grid>
-      </Grid>
-    </Box>
-  );
-};
-        </CardContent>
-      </Card>
-    </Grid>
-    <Grid item xs={12} sm={6} md={3}>
-      <Card sx={{ borderLeft: '4px solid #1cc88a', boxShadow: 2 }}>
-        <CardContent>
-          <Typography sx={{ fontSize: 14, color: '#1cc88a', fontWeight: 700 }}>EARNINGS (ANNUAL)</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>$215,000</Typography>
-        </CardContent>
-      </Card>
-    </Grid>
-    <Grid item xs={12} sm={6} md={3}>
-      <Card sx={{ borderLeft: '4px solid #36b9cc', boxShadow: 2 }}>
-        <CardContent>
-          <Typography sx={{ fontSize: 14, color: '#36b9cc', fontWeight: 700 }}>TASKS</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>50%</Typography>
-        </CardContent>
-      </Card>
-    </Grid>
-    <Grid item xs={12} sm={6} md={3}>
-      <Card sx={{ borderLeft: '4px solid #f6c23e', boxShadow: 2 }}>
-        <CardContent>
-          <Typography sx={{ fontSize: 14, color: '#f6c23e', fontWeight: 700 }}>PENDING REQUESTS</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>18</Typography>
-        </CardContent>
-
-const DoctorDashboard: FC = () => {
-  const { user, logout } = useAuth();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const user = { name: 'Dr. John Doe' };
   const navigate = useNavigate();
-  const [mobileOpen, setMobileOpen] = useState<boolean>(false);
 
-  const handleDrawerToggle = useCallback((): void => {
-    setMobileOpen((prev) => !prev);
-  }, []);
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
 
-  const handleLogout = useCallback((): void => {
-    logout();
-    navigate('/login', { replace: true });
-  }, [logout, navigate]);
+  const handleLogout = () => {
+    console.log('Logging out...');
+    navigate('/login');
+  };
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f8f9fc' }}>
-      <Sidebar 
-        onLogout={handleLogout} 
-        isMobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
-      />
+      <CssBaseline />
+      <Topbar user={user} onMenuClick={handleDrawerToggle} onLogout={handleLogout} />
+      <Sidebar onLogout={handleLogout} isMobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       <Box sx={{ 
         flexGrow: 1, 
-        ml: { sm: `${drawerWidth}px` },
-        width: { sm: `calc(100% - ${drawerWidth}px)` }
+        p: 3, 
+        width: { sm: `calc(100% - 250px)` }, 
+        mt: 8,
+        backgroundColor: '#f8f9fc',
+        minHeight: 'calc(100vh - 64px)'
       }}>
-        <Topbar 
-          user={user} 
-          onMenuClick={handleDrawerToggle}
-          onLogout={handleLogout}
-        />
-        <Box sx={{ p: 4, pt: 10 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Dashboard</Typography>
-          <DashboardCards />
+        {/* Header */}
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" sx={{ fontWeight: 600, color: '#2e3a4d' }}>Dashboard</Typography>
+          <Typography variant="body1" sx={{ color: '#6c757d' }}>Welcome back, {user?.name || 'Doctor'}!</Typography>
         </Box>
+        
+        {/* Stats Cards */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          {/* Total Patients */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ 
+              height: '100%',
+              borderRadius: 2,
+              boxShadow: '0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15)',
+              borderLeft: '0.25rem solid #4e73df'
+            }}>
+              <CardContent>
+                <Typography sx={{ 
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: '#4e73df',
+                  textTransform: 'uppercase',
+                  mb: 1
+                }}>
+                  Total Patients
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#5a5c69' }}>1,257</Typography>
+                  <Box sx={{ 
+                    bgcolor: 'rgba(78, 115, 223, 0.1)',
+                    borderRadius: '50%',
+                    width: 40,
+                    height: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <PersonIcon sx={{ color: '#4e73df' }} />
+                  </Box>
+                </Box>
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                  <ArrowUpwardIcon sx={{ color: '#1cc88a', fontSize: '1rem', mr: 0.5 }} />
+                  <Typography variant="caption" sx={{ color: '#1cc88a', fontWeight: 600 }}>
+                    12% increase
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#858796', ml: 1, fontSize: '0.7rem' }}>
+                    Since last month
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Appointments */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ 
+              height: '100%',
+              borderRadius: 2,
+              boxShadow: '0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15)',
+              borderLeft: '0.25rem solid #1cc88a'
+            }}>
+              <CardContent>
+                <Typography sx={{ 
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: '#1cc88a',
+                  textTransform: 'uppercase',
+                  mb: 1
+                }}>
+                  Appointments
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#5a5c69' }}>42</Typography>
+                  <Box sx={{ 
+                    bgcolor: 'rgba(28, 200, 138, 0.1)',
+                    borderRadius: '50%',
+                    width: 40,
+                    height: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <EventAvailableIcon sx={{ color: '#1cc88a' }} />
+                  </Box>
+                </Box>
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                  <ArrowUpwardIcon sx={{ color: '#1cc88a', fontSize: '1rem', mr: 0.5 }} />
+                  <Typography variant="caption" sx={{ color: '#1cc88a', fontWeight: 600 }}>
+                    8% increase
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#858796', ml: 1, fontSize: '0.7rem' }}>
+                    Since last month
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Today's Schedule */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ 
+              height: '100%',
+              borderRadius: 2,
+              boxShadow: '0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15)',
+              borderLeft: '0.25rem solid #36b9cc'
+            }}>
+              <CardContent>
+                <Typography sx={{ 
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: '#36b9cc',
+                  textTransform: 'uppercase',
+                  mb: 1
+                }}>
+                  Today's Schedule
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#5a5c69' }}>18</Typography>
+                  <Box sx={{ 
+                    bgcolor: 'rgba(54, 185, 204, 0.1)',
+                    borderRadius: '50%',
+                    width: 40,
+                    height: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <EventIcon sx={{ color: '#36b9cc' }} />
+                  </Box>
+                </Box>
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                  <ArrowDownwardIcon sx={{ color: '#e74a3b', fontSize: '1rem', mr: 0.5 }} />
+                  <Typography variant="caption" sx={{ color: '#e74a3b', fontWeight: 600 }}>
+                    3% decrease
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#858796', ml: 1, fontSize: '0.7rem' }}>
+                    Since yesterday
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Pending Requests */}
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ 
+              height: '100%',
+              borderRadius: 2,
+              boxShadow: '0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15)',
+              borderLeft: '0.25rem solid #f6c23e'
+            }}>
+              <CardContent>
+                <Typography sx={{ 
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: '#f6c23e',
+                  textTransform: 'uppercase',
+                  mb: 1
+                }}>
+                  Pending Requests
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#5a5c69' }}>18</Typography>
+                  <Box sx={{ 
+                    bgcolor: 'rgba(246, 194, 62, 0.1)',
+                    borderRadius: '50%',
+                    width: 40,
+                    height: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <EventNoteIcon sx={{ color: '#f6c23e' }} />
+                  </Box>
+                </Box>
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                  <ArrowDownwardIcon sx={{ color: '#e74a3b', fontSize: '1rem', mr: 0.5 }} />
+                  <Typography variant="caption" sx={{ color: '#e74a3b', fontWeight: 600 }}>
+                    2% decrease
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#858796', ml: 1, fontSize: '0.7rem' }}>
+                    Since yesterday
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       </Box>
     </Box>
   );
