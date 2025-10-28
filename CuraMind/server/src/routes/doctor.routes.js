@@ -1,38 +1,18 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.js';
-import DoctorController from '../controllers/doctor.controller.js';
+import { 
+  getDashboardStats, 
+} from '../controllers/doctor.controller.js';
+import { login } from '../controllers/auth.controller.js';
+import { authenticateDoctor } from '../middleware/authDoctor.js';
 
 const router = Router();
-const doctorController = new DoctorController();
 
-// Admin authorization middleware
-const authorizeAdmin = (req, res, next) => {
-  if (req.doctor?.isAdmin) {
-    next();
-  } else {
-    res.status(403).json({ 
-      success: false,
-      error: 'Admin access required' 
-    });
-  }
-};
+// Public routes
+router.post('/login', login);
 
-// Get all doctors (admin only)
-router.get('/', authenticate, authorizeAdmin, doctorController.getAllDoctors);
-
-// Get current doctor's profile
-router.get('/me', authenticate, doctorController.getDoctor);
-
-// Update current doctor's profile
-router.put('/me', authenticate, doctorController.updateProfile);
-
-// Get doctor by ID (admin only)
-router.get('/:id', authenticate, authorizeAdmin, doctorController.getDoctorById);
-
-// Update doctor (admin only)
-router.put('/:id', authenticate, authorizeAdmin, doctorController.updateDoctor);
-
-// Delete doctor (admin only)
-router.delete('/:id', authenticate, authorizeAdmin, doctorController.deleteDoctor);
+// Protected routes (require authentication)
+router.use(authenticateDoctor);
+// Doctor dashboard
+router.get('/:doctorId/stats', getDashboardStats);
 
 export default router;

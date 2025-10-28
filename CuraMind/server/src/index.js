@@ -4,7 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
-import { v4 as uuidv4 } from 'uuid';
+import MongoStore from 'connect-mongo';
+import { v4 as uuid4 } from 'uuid';
 import cors from 'cors';
 
 // Import routes
@@ -13,6 +14,7 @@ import doctorRoutes from './routes/doctor.routes.js';
 import patientRoutes from './routes/patient.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
 import testRoutes from './routes/test.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 import  errorHandler  from './middleware/error.middleware.js';
 import connectDB from './config/db.js';
 
@@ -39,12 +41,18 @@ if (!process.env.NODE_ENV) {
 // Debug log loaded environment variables
 console.log('Environment Variables:');
 console.log('- PORT:', process.env.PORT );
-console.log('- NODE_ENV:', process.env.NODE_ENV);
 console.log('- MONGO_URI:', process.env.MONGO_URI ? '***' : 'Not set');
+
+// Security middleware
+import helmet from 'helmet';
+import compression from 'compression';
+
+app.use(helmet());
+app.use(compression());
 
 // CORS Configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -52,11 +60,31 @@ app.use(cors({
 
 // Default configuration
 const config = {
-  databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/doctor_dashboard',
+  databaseUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/meditrust',
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-key',
   sessionSecret: process.env.SESSION_SECRET || 'dev-session-secret',
   nodeEnv: process.env.NODE_ENV || 'development'
 };
+
+// Schedule cleanup for temporary patients
+import cron from 'node-cron';
+import Patient from './models/patient.js';
+
+// Schedule cleanup every hour
+cron.schedule('0 * * * *', async () => {
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const result = await Patient.deleteMany({
+      createdAt: { $lt: cutoff },
+      hasBookedAppointment: false
+    });
+    if (result.deletedCount > 0) {
+      console.log(`🧹 Deleted ${result.deletedCount} expired temporary patients`);
+    }
+  } catch (error) {
+    console.error('Error cleaning up temporary patients:', error);
+  }
+});
 
 console.log('Using database URL:', config.databaseUrl);
 
@@ -67,16 +95,23 @@ app.use(cookieParser());
 
 // Session configuration
 app.use(session({
-  genid: () => uuidv4(),
   secret: config.sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: config.nodeEnv === 'production',
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+  },
+  genid: () => uuid4(),
+  store: MongoStore.create({
+    mongoUrl: config.databaseUrl,
+    mongoOptions: {},
+    ttl: 24 * 60 * 60, // 24 hours
+    touchAfter: 24 * 3600, // 24 hours
+    autoRemove: 'native' // Remove expired sessions automatically
+  })
 }));
 
 // Trust first proxy (if behind a reverse proxy like nginx)
@@ -115,6 +150,7 @@ app.use('/api/doctors', doctorRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -136,26 +172,42 @@ app.use((req, res) => {
 // Connect to database and start server
 const startServer = async () => {
   try {
-    await connectDB();
+    await connectDB(config.databaseUrl);
     const server = app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`
+---------------------------------------------
+  🚀 MediTrust Backend Running Successfully!
+---------------------------------------------
+  🌐 URL: http://localhost:${PORT}
+  ⚙️  Mode: ${process.env.NODE_ENV || 'development'}
+  🗄️  Database: ${config.databaseUrl.includes('@') ? 'MongoDB Atlas' : 'Local MongoDB'}
+---------------------------------------------
+`);
     });
 
-    // Handle graceful shutdown
+    // Graceful shutdown handler
     const shutdown = async () => {
-      console.log('Shutting down gracefully...');
+      console.log('\n🛑 Shutting down server...');
+      
+      // Close the server
       server.close(() => {
-        console.log('Server closed');
+        console.log('✅ Server closed');
         process.exit(0);
       });
+
+      // Force close server after 10 seconds
+      setTimeout(() => {
+        console.error('❌ Forcing server shutdown');
+        process.exit(1);
+      }, 10000);
     };
 
+    // Handle termination signals
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
     
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };

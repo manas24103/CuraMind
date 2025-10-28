@@ -4,25 +4,33 @@ import {
   savePrescription, 
   createManualPrescription, 
   getPatientPrescriptions,
-  getPrescriptionById 
+  getPrescriptionById,
+  finalizePrescription,
+  validatePrescription
 } from '../controllers/prescription.controller.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticateDoctor } from '../middleware/authDoctor.js';
 
 const router = Router();
 
 // Generate AI prescription (creates a draft)
-router.post('/generate', authenticate, generateAIPrescription);
+router.post('/generate', authenticateDoctor, generateAIPrescription);
 
-// Save final prescription (updates draft or creates final version)
-router.put('/:prescriptionId', authenticate, savePrescription);
+// Save or update prescription
+router.put('/:prescriptionId', authenticateDoctor, savePrescription);
+
+// Finalize prescription
+router.put('/:id/finalize', authenticateDoctor, finalizePrescription);
 
 // Create a manual prescription (direct entry by doctor)
-router.post('/manual', authenticate, createManualPrescription);
+router.post('/manual', authenticateDoctor, createManualPrescription);
 
 // Get all prescriptions for a patient
-router.get('/patient/:patientId', authenticate, getPatientPrescriptions);
+router.get('/patient/:patientId', authenticateDoctor, getPatientPrescriptions);
 
 // Get specific prescription
-router.get('/:prescriptionId', authenticate, getPrescriptionById);
+router.get('/:id', authenticateDoctor, getPrescriptionById);
+
+// Validate prescription content
+router.post('/validate', authenticateDoctor, validatePrescription);
 
 export default router;

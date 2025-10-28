@@ -1,46 +1,65 @@
-import { AIPrescriptionService } from '../services/aiPrescription.js';
-import { prisma } from '../utils/prisma.js';
-
-const aiPrescriptionService = new AIPrescriptionService();
-
+import axios from 'axios';
+import Prescription from '../models/Prescription.js';
 /**
- * Generate AI prescription
- * Combines functionality from both original implementations
+ * Generate AI prescription using OpenAI/Gemini
  */
 export const generateAIPrescription = async (req, res) => {
   try {
-    const { symptoms, medicalHistory } = req.body;
-    const userId = req.user?.id;
-    const userRole = req.user?.role;
-    const doctorId = userId; // For backward compatibility
+    const { symptoms, medicalHistory, patientId } = req.body;
+    const doctorId = req.doctor?._id;
 
-    if (!symptoms || !medicalHistory) {
-      return res.status(400).json({
-        success: false,
-        error: 'Symptoms and medical history are required',
+    if (!symptoms) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Symptoms are required' 
       });
     }
 
-    const result = await aiPrescriptionService.generatePrescription(
-      symptoms,
-      medicalHistory,
-      userId || doctorId,
-      userRole
+    // Call OpenAI API
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a medical assistant AI that generates safe, professional prescriptions based on symptoms and patient history.',
+          },
+          {
+            role: 'user',
+            content: `Symptoms: ${symptoms}. Medical history: ${medicalHistory || 'N/A'}. Generate a professional prescription with medicine name, dosage, and precautions.`,
+          },
+        ],
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
     );
 
-    res.json({
-      success: true,
-      data: {
-        content: result.content,
-        aiContext: result.aiContext,
-      },
+    const aiText = response.data.choices[0].message.content;
+
+    const prescription = await Prescription.create({
+      patientId,
+      doctorId,
+      symptoms,
+      medicalHistory: medicalHistory || '',
+      content: aiText,
+      isFinal: false,
+    });
+
+    res.json({ 
+      success: true, 
+      data: prescription 
     });
   } catch (error) {
     console.error('Error generating AI prescription:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to generate prescription',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Failed to generate prescription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -49,18 +68,17 @@ export const generateAIPrescription = async (req, res) => {
 export const generatePrescription = generateAIPrescription;
 
 /**
- * Save prescription - combines both implementations
+ * Save or update prescription
  */
 export const savePrescription = async (req, res) => {
   try {
     const { content, patientId, isFinal, prescriptionId } = req.body;
-    const doctorId = req.user?.id;
+    const doctorId = req.doctor?._id;
 
-    // Handle both implementations' requirements
-    if ((!prescriptionId && !patientId) || !content) {
+    if (!content) {
       return res.status(400).json({
         success: false,
-        error: prescriptionId ? 'Content is required' : 'Content and patient ID are required',
+        message: 'Content is required',
       });
     }
 
@@ -68,23 +86,27 @@ export const savePrescription = async (req, res) => {
     
     if (prescriptionId) {
       // Update existing prescription
-      prescription = await prisma.prescription.update({
-        where: { id: prescriptionId },
-        data: {
-          content,
+      prescription = await Prescription.findByIdAndUpdate(
+        prescriptionId,
+        { 
+          content, 
           isFinal: isFinal || false,
-          updatedAt: new Date(),
+          updatedAt: Date.now()
         },
+        { new: true }
+      );
+    } else if (patientId) {
+      // Create new prescription
+      prescription = await Prescription.create({
+        patientId,
+        doctorId,
+        content,
+        isFinal: isFinal || false,
       });
     } else {
-      // Create new prescription
-      prescription = await prisma.prescription.create({
-        data: {
-          content,
-          doctorId,
-          patientId,
-          isFinal: isFinal || false,
-        },
+      return res.status(400).json({
+        success: false,
+        message: 'Either prescriptionId or patientId is required',
       });
     }
 
@@ -96,47 +118,39 @@ export const savePrescription = async (req, res) => {
     console.error('Error saving prescription:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to save prescription',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Failed to save prescription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
 
 /**
- * Create manual prescription - combines both implementations
+ * Create manual prescription
  */
 export const createManualPrescription = async (req, res) => {
   try {
-    const { patientId, content, isFinal = true } = req.body;
-    const doctorId = req.user?.id;
+    const { patientId, doctorId, content, isFinal = false } = req.body;
 
-    if (!patientId || !content) {
-      return res.status(400).json({
-        success: false,
-        error: 'Patient ID and content are required',
-      });
-    }
-
-    const prescription = await prisma.prescription.create({
-      data: {
-        content,
-        doctorId,
-        patientId,
-        isFinal,
-        isManual: true,
-      },
+    // Create the prescription
+    const prescription = await Prescription.create({
+      patientId,
+      doctorId,
+      content,
+      isFinal,
+      isManual: true,
     });
 
     res.status(201).json({
       success: true,
-      data: prescription,
+      data: prescription
     });
+    
   } catch (error) {
     console.error('Error creating manual prescription:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to create manual prescription',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Failed to create manual prescription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -147,40 +161,29 @@ export const createManualPrescription = async (req, res) => {
 export const getPatientPrescriptions = async (req, res) => {
   try {
     const { patientId } = req.params;
-    const { limit = 10, offset = 0 } = req.query;
 
-    const prescriptions = await prisma.prescription.findMany({
-      where: { patientId },
-      orderBy: { createdAt: 'desc' },
-      take: parseInt(limit),
-      skip: parseInt(offset),
-      include: {
-        doctor: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient ID is required',
+      });
+    }
 
-    const total = await prisma.prescription.count({ where: { patientId } });
+    const prescriptions = await Prescription.find({ patientId })
+      .populate('doctorId', 'name email specialization')
+      .populate('patientId', 'name email dateOfBirth gender')
+      .sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      data: {
-        prescriptions,
-        total,
-        hasMore: total > parseInt(offset) + prescriptions.length,
-      },
+      data: prescriptions,
     });
   } catch (error) {
     console.error('Error fetching patient prescriptions:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch patient prescriptions',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Failed to fetch prescriptions',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -191,30 +194,15 @@ export const getPatientPrescriptions = async (req, res) => {
 export const getPrescriptionById = async (req, res) => {
   try {
     const { id } = req.params;
-    const prescription = await prisma.prescription.findUnique({
-      where: { id },
-      include: {
-        doctor: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        patient: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
+
+    const prescription = await Prescription.findById(id)
+      .populate('doctorId', 'name email specialization')
+      .populate('patientId', 'name email dateOfBirth gender');
 
     if (!prescription) {
       return res.status(404).json({
         success: false,
-        error: 'Prescription not found',
+        message: 'Prescription not found',
       });
     }
 
@@ -226,8 +214,49 @@ export const getPrescriptionById = async (req, res) => {
     console.error('Error fetching prescription:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch prescription',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Failed to fetch prescription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
+ * Finalize prescription
+ */
+export const finalizePrescription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+
+    const updatedPrescription = await Prescription.findByIdAndUpdate(
+      id,
+      { 
+        content,
+        isFinal: true,
+        updatedAt: Date.now()
+      },
+      { new: true }
+    )
+    .populate('doctorId', 'name email')
+    .populate('patientId', 'name email');
+
+    if (!updatedPrescription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Prescription not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: updatedPrescription,
+    });
+  } catch (error) {
+    console.error('Error finalizing prescription:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to finalize prescription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -242,36 +271,27 @@ export const validatePrescription = async (req, res) => {
     if (!content) {
       return res.status(400).json({
         success: false,
-        error: 'Content is required',
+        message: 'Content is required',
       });
     }
 
-    // Basic validation
+    // Add your validation logic here
     const isValid = content.trim().length > 0;
-    const errors = [];
-
-    if (!isValid) {
-      errors.push('Prescription content cannot be empty');
-    }
-
-    // Add more validation rules as needed
-    if (content.length < 10) {
-      errors.push('Prescription content is too short');
-    }
+    const validationMessage = isValid ? 'Prescription is valid' : 'Prescription cannot be empty';
 
     res.json({
       success: true,
       data: {
-        isValid: errors.length === 0,
-        errors,
+        isValid,
+        message: validationMessage,
       },
     });
   } catch (error) {
     console.error('Error validating prescription:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to validate prescription',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Failed to validate prescription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

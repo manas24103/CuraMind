@@ -1,5 +1,13 @@
-import Doctor from '../models/Doctor.js';
 import jwt from 'jsonwebtoken';
+import Doctor from '../models/Doctor.js';
+import Admin from '../models/Admin.js';
+import Receptionist from '../models/Receptionist.js';
+
+const userModels = {
+  doctor: Doctor,
+  admin: Admin,
+  receptionist: Receptionist
+};
 
 export const login = async (req, res, next) => {
   try {
@@ -11,7 +19,7 @@ export const login = async (req, res, next) => {
       url: req.originalUrl
     });
 
-    const { email, password } = req.body;
+    const { email, password, userType = 'doctor' } = req.body;
 
     // Validate input
     if (!email || !password) {
@@ -22,13 +30,22 @@ export const login = async (req, res, next) => {
       });
     }
     
-    console.log(`Attempting login for email: ${email}`);
+    console.log(`Attempting login for ${userType} with email: ${email}`);
+
+    // Get the appropriate model based on user type
+    const UserModel = userModels[userType];
+    if (!UserModel) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user type'
+      });
+    }
 
     // Find user by email
-    const doctor = await Doctor.findOne({ email }).select('+password').exec();
+    const user = await UserModel.findOne({ email }).select('+password').exec();
 
-    if (!doctor) {
-      console.warn(`Login failed: No doctor found with email ${email}`);
+    if (!user) {
+      console.warn(`Login failed: No ${userType} found with email ${email}`);
       return res.status(401).json({ 
         success: false, 
         message: 'Invalid credentials' 
@@ -37,7 +54,7 @@ export const login = async (req, res, next) => {
 
     // Check if password matches
     console.log('Comparing passwords...');
-    const isMatch = await doctor.comparePassword(password);
+    const isMatch = await user.comparePassword(password);
     console.log('Password comparison result:', isMatch);
 
     if (!isMatch) {
@@ -65,11 +82,12 @@ export const login = async (req, res, next) => {
 
     console.log('Generating JWT token...');
     
-    // Create payload
+    // Create payload with user type
     const payload = { 
-      id: doctor._id.toString(),
-      role: doctor.role || 'doctor',
-      email: doctor.email
+      id: user._id.toString(),
+      role: userType,
+      email: user.email,
+      name: user.name
     };
     
     console.log('JWT payload:', payload);
@@ -85,10 +103,10 @@ export const login = async (req, res, next) => {
     console.log('JWT token generated successfully');
 
     // Convert to plain object and remove sensitive fields
-    const userObj = doctor.toObject();
+    const userObj = user.toObject();
     const { password: pwd, __v, ...userData } = userObj;
 
-    // Prepare response
+    // Prepare response based on user type
     const responseData = {
       success: true,
       token,
@@ -96,8 +114,7 @@ export const login = async (req, res, next) => {
         _id: userData._id,
         name: userData.name,
         email: userData.email,
-        role: userData.role,
-        specialization: userData.specialization,
+        role: userType,
         createdAt: userData.createdAt,
         updatedAt: userData.updatedAt
       },
@@ -113,41 +130,6 @@ export const login = async (req, res, next) => {
     return res.status(500).json({ 
       success: false,
       error: 'An error occurred during login' 
-    });
-  }
-};
-
-export const getDoctorDetails = async (req, res, next) => {
-  try {
-    // The authenticate middleware should have already attached the doctor to the request
-    if (!req.doctor) {
-      return res.status(401).json({ 
-        success: false,
-        error: 'Not authenticated' 
-      });
-    }
-
-    const doctor = await Doctor.findById(req.doctor._id)
-      .select('-password -__v')
-      .lean()
-      .exec();
-
-    if (!doctor) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Doctor not found' 
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      data: doctor
-    });
-  } catch (error) {
-    console.error('Get doctor details error:', error);
-    return res.status(500).json({ 
-      success: false,
-      error: 'An error occurred while fetching doctor details' 
     });
   }
 };

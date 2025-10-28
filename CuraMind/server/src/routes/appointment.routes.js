@@ -6,23 +6,26 @@ import {
   updateAppointment,
   deleteAppointment 
 } from '../controllers/appointment.controller.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticateDoctor } from '../middleware/authDoctor.js';
 
 const router = Router();
 
-// Create appointment
-router.post('/', authenticate, createAppointment);
+// All routes require doctor authentication
+router.use(authenticateDoctor);
 
-// Get all appointments for a doctor
-router.get('/', authenticate, getDoctorAppointments);
+// Create new appointment
+router.post('/', createAppointment);
 
-// Get specific appointment
-router.get('/:id', authenticate, getAppointment);
+// Get all appointments for the authenticated doctor
+router.get('/', getDoctorAppointments);
 
-// Update appointment
-router.put('/:id', authenticate, updateAppointment);
+// Get specific appointment by ID
+router.get('/:id', getAppointment);
 
-// Delete appointment
-router.delete('/:id', authenticate, deleteAppointment);
+// Update appointment by ID
+router.put('/:id', updateAppointment);
+
+// Delete appointment by ID
+router.delete('/:id', deleteAppointment);
 
 export default router;
