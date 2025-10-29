@@ -1,17 +1,19 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from './services/api';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AOS from 'aos';
 import { ToastContainer, toast } from 'react-toastify';
 import 'aos/dist/aos.css';
 import 'react-toastify/dist/ReactToastify.css';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import 'bootstrap-icons/font/bootstrap-icons.css';
-import 'swiper/css';
 import 'glightbox/dist/css/glightbox.min.css';
-import './assets/css/main.css';
+import './index.css';
+
+// Import Components
+import Layout from './components/Layout';
 
 // Import Pages
 import LandingPage from './pages/LandingPage';
+import AboutPage from './pages/AboutPage';
 import Appointment from './pages/Appointment';
 import Doctors from './pages/Doctors';
 import Login from './pages/Login.jsx';
@@ -19,13 +21,47 @@ import DoctorDashboard from './pages/DoctorDashboard.jsx';
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import ReceptionistDashboard from './pages/receptionist/ReceptionistDashboard.jsx';
 
-
 // Protected Route Component for all user types
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isValid, setIsValid] = useState(false);
   const token = localStorage.getItem('token');
   const userType = localStorage.getItem('userType');
   
-  if (!token) {
+  useEffect(() => {
+    const verifyToken = async () => {
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check if we have a token and user data
+      const userType = localStorage.getItem('userType');
+      const userData = localStorage.getItem('user');
+      
+      // If we have all required auth data, consider the user authenticated
+      // The token will be verified on the first API call via the interceptor
+      setIsValid(!!(token && userType && userData));
+      
+      if (!token || !userType || !userData) {
+        // Clear any partial auth data
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+        localStorage.removeItem('user');
+      } 
+      setIsLoading(false);
+    };
+    
+    verifyToken();
+  }, [token]);
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    </div>;
+  }
+  
+  if (!token || !isValid) {
     return <Navigate to="/login" replace />;
   }
   
@@ -52,12 +88,32 @@ function App() {
   }, []);
 
   return (
-    <div className="App">
-      <main id="main">
+    <div className="min-h-screen flex flex-col">
+      <main className="flex-grow">
         <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/appointment" element={<Appointment />} />
-          <Route path="/doctors" element={<Doctors />} />
+          {/* Public Routes with Layout (Header + Footer) */}
+          <Route path="/" element={
+            <Layout>
+              <LandingPage />
+            </Layout>
+          } />
+          <Route path="/about" element={
+            <Layout>
+              <AboutPage />
+            </Layout>
+          } />
+          <Route path="/appointment" element={
+            <Layout>
+              <Appointment />
+            </Layout>
+          } />
+          <Route path="/doctors" element={
+            <Layout>
+              <Doctors />
+            </Layout>
+          } />
+          
+          {/* Public Routes without Layout */}
           <Route path="/login" element={<Login />} />
           
           {/* Protected Routes */}

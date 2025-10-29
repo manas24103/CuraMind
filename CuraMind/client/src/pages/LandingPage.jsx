@@ -1,200 +1,116 @@
 import React, { useEffect } from 'react';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
-import Header from '../components/Header';
-import Footer from '../components/Footer';
+import MainContent from '../components/MainContent';
+import { FaPhoneAlt, FaClock, FaHeartbeat, FaLungs } from 'react-icons/fa';
+
+// Local hero background image
+const HeroBackground = 'images/hero-bg.jpg';
 
 const LandingPage = () => {
-  useEffect(() => {
-    AOS.init({ duration: 800, once: true });
-  }, []);
+  useEffect(() => {
+    AOS.init({ duration: 800, once: true });
+  }, []);
 
-  return (
-    <>
-      <Header />
-      {/* ======= Hero Section ======= */}
-      <section
-        id="hero"
-        className="d-flex align-items-center justify-content-center text-center bg-light py-5"
-        style={{ minHeight: '100vh', marginTop: '56px' }} // Add margin-top to account for fixed header
-      >
-        <div className="container" data-aos="fade-up">
-          <h1 className="display-5 fw-bold text-primary">Advanced Healthcare</h1>
-          <h2 className="text-secondary">Leading Healthcare Specialists</h2>
-          <p className="mt-3 mb-4 text-muted">
-            Advanced Medical Care for Your Family's Health. Lorem ipsum dolor sit amet,
-            consectetur adipiscing elit. Ut elit tellus, luctus nec ullamcorper mattis,
-            pulvinar dapibus leo.
-          </p>
-          <div className="d-flex justify-content-center gap-3">
-            <a href="#appointment" className="btn btn-primary px-4">
-              Book Appointment
-            </a>
-            <a href="#doctors" className="btn btn-outline-primary px-4">
-              Find a Doctor
-            </a>
-          </div>
-        </div>
-      </section>
+  // Data for the service/info cards at the bottom of the hero
+  const infoBoxes = [
+    { title: "Emergency Line", content: "+1 (555) 987-6543", isPhone: true, icon: <FaPhoneAlt className="mx-auto text-cyan-500 text-3xl mb-3" /> }, // Use a cyan color for the info icons
+    { title: "Working Hours", content: "Mon - Fri: 8AM - 8PM", isPhone: false, icon: <FaClock className="mx-auto text-cyan-500 text-3xl mb-3" /> },
+    { title: "Cardiology", content: "Expert heart care for all your cardiovascular needs.", isPhone: false, icon: <FaHeartbeat className="mx-auto text-cyan-500 text-3xl mb-3" /> },
+    { title: "Pulmonology", content: "Comprehensive lung and respiratory care services.", isPhone: false, icon: <FaLungs className="mx-auto text-cyan-500 text-3xl mb-3" /> },
+  ];
 
-      {/* ======= Info Boxes ======= */}
-      <section className="container text-center my-5">
-        <div className="row g-4">
-          <div className="col-md-3">
-            <div className="p-4 border rounded shadow-sm">
-              <h5>Emergency Line</h5>
-              <p className="fw-bold text-primary mb-0">+1 (555) 987-6543</p>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="p-4 border rounded shadow-sm">
-              <h5>Working Hours</h5>
-              <p className="mb-0">Mon - Fri: 8AM - 8PM</p>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="p-4 border rounded shadow-sm">
-              <h5>Cardiology</h5>
-              <p className="text-muted small">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-              </p>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="p-4 border rounded shadow-sm">
-              <h5>Pulmonology</h5>
-              <p className="text-muted small">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+  return (
+    <div className="min-h-screen flex flex-col">
+      
+      {/* The <Header /> and <Footer /> must be rendered by the Layout component in App.js */}
+      
+      {/* ======= Hero Section (With Background Image) ======= */}
+      <section 
+        id="hero" 
+        className="relative min-h-screen flex items-center pt-24 pb-40 md:pt-32 md:pb-48"
+        // Key Fix: Add mt-[-80px] class (or similar) here if the Header is fixed and this section needs to be pulled up
+        // NOTE: Tailwind does not support arbitrary negative margin classes directly unless configured.
+        // It's safer to use padding-top on this section and adjust the min-h-screen for fixed header offset.
+        // Assuming a standard fixed header height of ~80px:
+        style={{ marginTop: '-80px' }} 
+      > 
+        {/* Background image with overlay */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center z-0"
+          style={{
+            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.7)), url(${HeroBackground})`,
+          }}
+        ></div>
 
-      {/* ======= About Section ======= */}
-      <section className="bg-white py-5">
-        <div className="container" data-aos="fade-up">
-          <div className="row align-items-center">
-            <div className="col-lg-6">
-              <img
-                src="https://bootstrapmade.com/demo/templates/Medilab/assets/img/about.jpg"
-                alt="Modern Facility"
-                className="img-fluid rounded"
-              />
-            </div>
-            <div className="col-lg-6 mt-4 mt-lg-0">
-              <h3 className="fw-bold">Modern Healthcare Facility</h3>
-              <h5 className="text-primary mb-3">25+ Years of Excellence</h5>
-              <p>
-                Committed to Exceptional Patient Care. Lorem ipsum dolor sit amet,
-                consectetur adipiscing elit. Ut elit tellus, luctus nec ullamcorper mattis,
-                pulvinar dapibus leo.
-              </p>
-              <ul className="list-unstyled">
-                <li>✅ Compassionate Care</li>
-                <li>✅ Medical Excellence</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
+        {/* Main Content Wrapper (Center Content Vertically & Horizontally) */}
+        <div className="container mx-auto px-4 relative z-10 w-full">
+            <div className='flex items-center min-h-[calc(100vh-160px)]'> {/* Removed justify-center to align text to left */}
+                <div className="max-w-4xl text-white pt-20 pl-8" data-aos="fade-up"> {/* Added pl-8 for left padding */}
+                    {/* Leading Specialist Badge */}
+                    <div className="inline-block bg-cyan-500/20 text-cyan-300 text-sm font-medium px-4 py-2 rounded-full mb-6" 
+                            data-aos="fade-up">
+                        Leading Healthcare Specialists
+                    </div>
+                    
+                    {/* Main Headline */}
+                    <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6" 
+                            data-aos="fade-up" 
+                            data-aos-delay="100">
+                        Advanced Medical Care for Your Family's Health
+                    </h1>
+                    
+                    {/* Subtitle/Description */}
+                    <p className="text-lg md:text-xl text-gray-200 mb-8 max-w-2xl" 
+                        data-aos="fade-up" 
+                        data-aos-delay="200">
+                        Exceptional healthcare services with a focus on patient well-being and cutting-edge medical technology.
+                    </p>
 
-      {/* ======= Departments Section ======= */}
-      <section id="departments" className="py-5 bg-light">
-        <div className="container" data-aos="fade-up">
-          <h2 className="text-center fw-bold mb-5">Featured Departments</h2>
-          <div className="row g-4">
-            {[
-              ["Cardiology", "Comprehensive cardiovascular care."],
-              ["Neurology", "Expert care for brain and nervous system disorders."],
-              ["Orthopedics", "Musculoskeletal treatment and surgeries."],
-              ["Pediatrics", "Complete child healthcare and wellness."],
-              ["Oncology", "Advanced cancer care with modern techniques."],
-              ["Emergency", "24/7 emergency and trauma services."]
-            ].map(([title, desc], i) => (
-              <div className="col-md-4" key={i}>
-                <div className="p-4 bg-white rounded shadow-sm h-100">
-                  <h5 className="text-primary">{title}</h5>
-                  <p className="text-muted small">{desc}</p>
-                  <a href="#learn-more" className="text-decoration-none text-primary">
-                    Learn More →
-                  </a>
+                    {/* Removed CTA Buttons as per request */}
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ======= Services Section ======= */}
-      <section id="services" className="py-5">
-        <div className="container" data-aos="fade-up">
-          <h2 className="text-center fw-bold mb-5">Featured Services</h2>
-          <div className="row g-4">
-            {[
-              ["Cardiology Excellence", "Advanced heart care & surgery"],
-              ["Neurology & Brain Health", "Brain imaging, stroke & rehabilitation"],
-              ["Orthopedic Surgery", "Joint replacement, sports medicine"],
-              ["Emergency & Trauma Care", "Critical care and 24/7 support"]
-            ].map(([title, desc], i) => (
-              <div className="col-md-6 col-lg-3" key={i}>
-                <div className="p-4 border rounded h-100">
-                  <i className="bi bi-heart-pulse fs-1 text-primary"></i>
-                  <h6 className="mt-3">{title}</h6>
-                  <p className="small text-muted">{desc}</p>
-                  <a href="#learn" className="text-primary text-decoration-none">
-                    Learn More →
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ======= Call to Action ======= */}
-      <section className="bg-primary text-white text-center py-5">
-        <div className="container">
-          <h3>Your Health is Our Priority</h3>
-          <p className="mb-4">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
-            incididunt ut labore et dolore magna aliqua.
-          </p>
-          <div className="d-flex justify-content-center gap-3">
-            <a href="#appointment" className="btn btn-light">
-              Book Appointment
-            </a>
-            <a href="#doctors" className="btn btn-outline-light">
-              Find a Doctor
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ======= Emergency Info ======= */}
-      <section className="container my-5" data-aos="fade-up">
-        <h3 className="text-center mb-4">Emergency Info</h3>
-        <div className="row g-4">
-          {[
-            ["Emergency Room", "+1 (555) 123-4567", "Open 24/7"],
-            ["Urgent Care", "+1 (555) 987-6543", "Mon-Sun: 7:00 AM - 10:00 PM"],
-            ["Nurse Helpline", "+1 (555) 456-7890", "Available 24/7"],
-            ["Poison Control", "1-800-222-1222", "Available 24/7"]
-          ].map(([title, phone, hours], i) => (
-            <div className="col-md-3" key={i}>
-              <div className="p-4 border rounded text-center h-100">
-                <h6 className="text-primary">{title}</h6>
-                <p className="fw-bold mb-1">{phone}</p>
-                <small className="text-muted">{hours}</small>
-              </div>
             </div>
-          ))}
-        </div>
-      </section>
-
-      <Footer />
-    </>
-  );
+            
+            {/* Info Boxes/Service Cards at the very bottom */}
+            {/* FIX: Simplified positioning. Tailwind's absolute positioning is tricky for full-width elements. */}
+            {/* We will center the container but let the cards overlap into the next section */}
+            <div className="absolute bottom-[-60px] left-0 right-0 z-20 px-4" 
+                    data-aos="fade-up" 
+                    data-aos-delay="500">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto w-full">
+                    {infoBoxes.map((box, i) => (
+                        <div 
+                            key={i}
+                            className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow duration-300 border border-gray-100"
+                        >
+                            {/* Icon */}
+                            {box.icon}
+                            
+                            <h5 className="text-lg font-semibold text-gray-800 mb-2">{box.title}</h5>
+                            
+                            {box.isPhone ? (
+                                <a 
+                                    href={`tel:${box.content}`} 
+                                    className="text-cyan-600 hover:text-cyan-700 font-medium transition-colors"
+                                >
+                                    {box.content}
+                                </a>
+                            ) : (
+                                <p className="text-gray-600 text-sm">{box.content}</p>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+      </section>
+      
+       {/* Main Content Sections - Adjusted padding to reduce space */}
+      <div className="pt-20"> {/* Reduced padding from pt-32 to pt-20 */}
+            <MainContent />
+      </div>
+    </div>
+  );
 };
 
 export default LandingPage;

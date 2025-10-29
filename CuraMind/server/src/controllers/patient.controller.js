@@ -3,10 +3,25 @@ import Patient from '../models/patient.js';
 export class PatientController {
     async getAllPatients(req, res) {
         try {
-            const patients = await Patient.find();
-            res.json(patients);
+            console.log('Fetching all patients...');
+            const patients = await Patient.find().lean();
+            console.log(`Found ${patients.length} patients`);
+            
+            // Format the response consistently
+            const response = {
+                success: true,
+                count: patients.length,
+                data: patients
+            };
+            
+            res.json(response);
         } catch (error) {
-            res.status(500).json({ message: 'Error fetching patients', error });
+            console.error('Error in getAllPatients:', error);
+            res.status(500).json({ 
+                success: false,
+                message: 'Error fetching patients',
+                error: error.message 
+            });
         }
     }
 

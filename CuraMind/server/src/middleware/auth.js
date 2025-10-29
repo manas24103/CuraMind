@@ -15,10 +15,18 @@ const userModels = {
 export const authenticate = (requiredRole) => {
   return async (req, res, next) => {
     try {
+      console.log('Auth middleware triggered for path:', req.path);
+      
+      // For verify-token endpoint, we want to verify the token but not require a specific role
+      const isVerifyTokenEndpoint = req.path.endsWith('/verify-token');
+      
       // Get token from header
-      const authHeader = req.headers.authorization;
-
+      const authHeader = req.headers.authorization || req.headers.Authorization;
+      
       if (!authHeader) {
+        if (isVerifyTokenEndpoint) {
+          return res.status(200).json({ success: false, message: 'No token provided' });
+        }
         return res.status(401).json({ 
           success: false,
           error: 'No token, authorization denied' 
@@ -42,8 +50,25 @@ export const authenticate = (requiredRole) => {
       }
 
       try {
+        if (!token) {
+          if (isVerifyTokenEndpoint) {
+            return res.status(200).json({ 
+              success: false, 
+              message: 'No token provided' 
+            });
+          }
+          return res.status(401).json({ 
+            success: false,
+            message: 'No token provided' 
+          });
+        }
+        
         // Verify token
         const decoded = verify(token, process.env.JWT_SECRET);
+        
+        if (!decoded) {
+          throw new Error('Invalid token');
+        }
         
         // Get user type from token
         const userType = decoded.role || 'doctor';
@@ -75,13 +100,53 @@ export const authenticate = (requiredRole) => {
           });
         }
 
-        // Attach user to request object
-        req.user = user.toObject();
-        req.user.role = userType;
+        // Attach user to request object with proper role
+        const userObj = user.toObject();
+        userObj.role = userType; // Ensure role is set
+        req.user = userObj;
+        
+        // For debugging
+        console.log('Authenticated user:', {
+          id: user._id,
+          email: user.email,
+          role: userType,
+          name: user.name
+        });
         
         next();
       } catch (error) {
         console.error('Token verification error:', error);
+        
+        // Handle specific JWT errors
+        if (error.name === 'TokenExpiredError') {
+          return res.status(401).json({ 
+            success: false, 
+            message: 'Session expired. Please log in again.' 
+          });
+        }
+        
+        if (error.name === 'JsonWebTokenError') {
+          return res.status(401).json({ 
+            success: false, 
+            message: 'Invalid token' 
+          });
+        }
+        
+        // For verify-token endpoint, return a 200 with success: false
+        if (isVerifyTokenEndpoint) {
+          return res.status(200).json({ 
+            success: false, 
+            message: 'Token verification failed',
+            error: error.message 
+          });
+        }
+        
+        // For other endpoints, return a 401
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Authentication failed',
+          error: error.message 
+        });
         
         if (error instanceof TokenExpiredError) {
           return res.status(401).json({ 

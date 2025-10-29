@@ -25,13 +25,17 @@ api.interceptors.response.use(
       // The request was made and the server responded with a status code
       // that falls out of the range of 2xx
       if (error.response.status === 401) {
-        // Unauthorized - redirect to login
-        localStorage.removeItem('doctorToken');
-        window.location.href = '/doctor-login';
+        // Just remove the token, don't redirect
+        localStorage.removeItem('token');
+        // Don't show a toast here, let the login component handle the error
+        return Promise.reject(error);
       }
       
       const errorMessage = error.response.data?.message || 'An error occurred';
-      toast.error(errorMessage);
+      // Only show toast for non-login related errors
+      if (error.config.url !== '/auth/login') {
+        toast.error(errorMessage);
+      }
     } else if (error.request) {
       // The request was made but no response was received
       console.error('No response received:', error.request);

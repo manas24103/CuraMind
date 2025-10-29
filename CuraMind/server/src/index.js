@@ -43,6 +43,10 @@ console.log('Environment Variables:');
 console.log('- PORT:', process.env.PORT );
 console.log('- MONGO_URI:', process.env.MONGO_URI ? '***' : 'Not set');
 
+// Body parser middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // Security middleware
 import helmet from 'helmet';
 import compression from 'compression';
@@ -144,13 +148,46 @@ app.use((req, res, next) => {
 const publicPath = path.join(__dirname, '../public');
 app.use(express.static(publicPath));
 
+// Debug: Log all registered routes
+const printRoutes = (routes, parentPath = '') => {
+  routes.forEach(route => {
+    if (route.route) {
+      // Routes registered directly on the app
+      const methods = Object.keys(route.route.methods).join(',').toUpperCase();
+      console.log(`${methods.padEnd(7)} ${parentPath}${route.route.path}`);
+    } else if (route.name === 'router' && route.handle.stack) {
+      // Router middleware
+      const routerPath = route.regexp.toString()
+        .replace('/^', '')
+        .replace('\\/?', '')
+        .replace('(?=\\/|$)', '')
+        .replace(/\/(?:([^\/]+?))\//g, '/:$1/');
+      
+      route.handle.stack.forEach(handler => {
+        const methods = handler.route ? 
+          Object.keys(handler.route.methods).join(',').toUpperCase() : 'ALL';
+        const path = handler.route ? handler.route.path : '';
+        console.log(`${methods.padEnd(7)} /api${parentPath}${routerPath}${path}`);
+      });
+    }
+  });
+};
+
 // Routes
+console.log('\n=== Registered Routes ===');
 app.use('/api/auth', authRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/admin', adminRoutes);
+
+// Print all routes after they're registered
+process.nextTick(() => {
+  console.log('\n=== Available Routes ===');
+  printRoutes(app._router.stack);
+  console.log('========================\n');
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

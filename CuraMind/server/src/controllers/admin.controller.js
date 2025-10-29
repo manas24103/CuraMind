@@ -6,7 +6,61 @@ class AdminController {
   // Create a new doctor
   async createDoctor(req, res) {
     try {
-      const { name, email, password, specialization, phone, role = 'doctor' } = req.body;
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      
+      // Destructure and validate required fields
+      const { 
+        name, 
+        email, 
+        password, 
+        specialization, 
+        phone, 
+        experience,
+        profilePicture, 
+        role = 'doctor' 
+      } = req.body;
+
+      // Validate required fields
+      if (!name || !email || !password || !specialization || experience === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: 'Missing required fields. Required: name, email, password, specialization, experience',
+          received: { name: !!name, email: !!email, password: !!password, 
+                     specialization: !!specialization, experience: experience !== undefined }
+        });
+      }
+
+      // Debug log the experience field
+      console.log('Raw experience value:', experience, 'Type:', typeof experience);
+      
+      // Convert experience to number and validate
+      let experienceNum;
+      try {
+        // First try to convert to number
+        experienceNum = Number(experience);
+        
+        // Explicitly check for NaN after conversion
+        if (isNaN(experienceNum)) {
+          throw new Error('Invalid number');
+        }
+        
+        // Check if it's a whole number and non-negative
+        if (!Number.isInteger(experienceNum) || experienceNum < 0) {
+          throw new Error('Must be a non-negative integer');
+        }
+        
+        console.log('Successfully converted experience to number:', experienceNum, 'Type:', typeof experienceNum);
+        
+      } catch (error) {
+        console.error('Experience validation failed:', error.message);
+        return res.status(400).json({
+          success: false,
+          message: `Invalid experience value: ${error.message}`,
+          received: experience,
+          expected: 'A non-negative integer number',
+          type: typeof experience
+        });
+      }
 
       // Check if doctor already exists
       const doctorExists = await Doctor.findOne({ email });
@@ -21,13 +75,15 @@ class AdminController {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-      // Create doctor
+      // Create doctor with validated data
       const doctor = await Doctor.create({
         name,
         email,
         password: hashedPassword,
         specialization,
-        phone,
+        phone: phone || undefined,
+        experience: experienceNum, // Explicitly set as number
+        profilePicture: profilePicture || undefined,
         role
       });
 

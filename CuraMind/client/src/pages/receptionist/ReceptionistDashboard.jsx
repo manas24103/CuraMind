@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Table, Modal, Form, Spinner, Alert, Tabs, Tab } from 'react-bootstrap';
 import { patientAPI, appointmentAPI, doctorAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { FaUserPlus, FaCalendarPlus, FaEdit, FaTrash, FaUserMd, FaUserInjured, FaPhone, FaEnvelope, FaMapMarkerAlt, FaVenusMars, FaBirthdayCake, FaClock, FaNotesMedical } from 'react-icons/fa';
+import { BsCalendarDate } from 'react-icons/bs';
 
 const ReceptionistDashboard = () => {
   const [patients, setPatients] = useState([]);
@@ -155,6 +156,7 @@ const ReceptionistDashboard = () => {
 
   // Format date for display
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     const options = { 
       year: 'numeric', 
       month: 'short', 
@@ -165,343 +167,419 @@ const ReceptionistDashboard = () => {
     return new Date(dateString).toLocaleString('en-US', options);
   };
 
+  // Modal component
+  const Modal = ({ isOpen, onClose, title, children, onSave, saveText = 'Save' }) => {
+    if (!isOpen) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-between items-center p-4 border-b">
+            <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+            <button 
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <span className="text-2xl">&times;</span>
+            </button>
+          </div>
+          <div className="p-6">
+            {children}
+          </div>
+          <div className="flex justify-end p-4 border-t bg-gray-50 rounded-b-lg">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 mr-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onSave}
+              className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
+            >
+              {saveText}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Tab component
+  const Tab = ({ active, onClick, children }) => (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 font-medium text-sm ${active ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+    >
+      {children}
+    </button>
+  );
+
   return (
-    <Container fluid className="py-4">
-      <h2 className="mb-4">Receptionist Dashboard</h2>
+    <div className="container mx-auto px-4 py-6">
+      <h2 className="text-2xl font-bold text-gray-800 mb-6">Receptionist Dashboard</h2>
       
-      <Tabs
-        activeKey={activeTab}
-        onSelect={(k) => setActiveTab(k)}
-        className="mb-3"
-      >
-        <Tab eventKey="patients" title="Patients">
-          <Card className="mb-4">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <h5>Patients List</h5>
-              <Button 
-                variant="primary" 
-                size="sm"
-                onClick={() => setShowPatientModal(true)}
-              >
-                Add New Patient
-              </Button>
-            </Card.Header>
-            <Card.Body>
-              {isLoading.patients ? (
-                <div className="text-center">
-                  <Spinner animation="border" />
-                </div>
-              ) : (
-                <Table striped hover responsive>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Phone</th>
-                      <th>Date of Birth</th>
-                      <th>Gender</th>
-                      <th>Actions</th>
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-6">
+        <div className="flex space-x-2">
+          <Tab 
+            active={activeTab === 'patients'} 
+            onClick={() => setActiveTab('patients')}
+          >
+            Patients
+          </Tab>
+          <Tab 
+            active={activeTab === 'appointments'} 
+            onClick={() => setActiveTab('appointments')}
+          >
+            Appointments
+          </Tab>
+        </div>
+      </div>
+
+      {/* Patients Tab */}
+      {activeTab === 'patients' && (
+        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+          <div className="p-4 border-b flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-800">Patients List</h3>
+            <button
+              onClick={() => setShowPatientModal(true)}
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <FaUserPlus className="mr-2" />
+              Add New Patient
+            </button>
+          </div>
+          
+          <div className="overflow-x-auto">
+            {isLoading.patients ? (
+              <div className="flex justify-center items-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date of Birth</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {patients.map(patient => (
+                    <tr key={patient._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <FaUserInjured className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{patient.name}</div>
+                            <div className="text-sm text-gray-500">{patient.gender}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center">
+                          <FaEnvelope className="mr-2 text-gray-400" />
+                          {patient.email}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center">
+                          <FaPhone className="mr-2 text-gray-400" />
+                          {patient.phone}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center">
+                          <FaBirthdayCake className="mr-2 text-gray-400" />
+                          {new Date(patient.dateOfBirth).toLocaleDateString()}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => {
+                            setSelectedPatient(patient);
+                            setShowAppointmentModal(true);
+                            setAppointmentForm(prev => ({
+                              ...prev,
+                              patientId: patient._id
+                            }));
+                          }}
+                          className="text-blue-600 hover:text-blue-900 mr-4"
+                        >
+                          <FaCalendarPlus className="inline mr-1" /> Book
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {patients.map(patient => (
-                      <tr key={patient._id}>
-                        <td>{patient.name}</td>
-                        <td>{patient.email}</td>
-                        <td>{patient.phone}</td>
-                        <td>{new Date(patient.dateOfBirth).toLocaleDateString()}</td>
-                        <td>{patient.gender}</td>
-                        <td>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedPatient(patient);
-                              setAppointmentForm(prev => ({
-                                ...prev,
-                                patientId: patient._id
-                              }));
-                              setShowAppointmentModal(true);
-                            }}
-                          >
-                            Book Appointment
-                          </Button>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Appointments Tab */}
+      {activeTab === 'appointments' && (
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="p-4 border-b flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-800">Appointments</h3>
+            <button
+              onClick={() => setShowAppointmentModal(true)}
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <FaCalendarPlus className="mr-2" />
+              New Appointment
+            </button>
+          </div>
+          
+          <div className="overflow-x-auto">
+            {isLoading.appointments ? (
+              <div className="flex justify-center items-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Doctor</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {appointments.map(appointment => {
+                    const patient = patients.find(p => p._id === appointment.patientId) || {};
+                    const doctor = doctors.find(d => d._id === appointment.doctorId) || {};
+                    
+                    return (
+                      <tr key={appointment._id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{patient.name || 'N/A'}</div>
+                          <div className="text-sm text-gray-500">{patient.phone || ''}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                              <FaUserMd className="h-5 w-5 text-green-600" />
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">Dr. {doctor.name || 'N/A'}</div>
+                              <div className="text-sm text-gray-500">{doctor.specialization || ''}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{formatDate(appointment.dateTime)}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {appointment.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          <div className="max-w-xs truncate">{appointment.reason}</div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              )}
-            </Card.Body>
-          </Card>
-        </Tab>
-
-        <Tab eventKey="appointments" title="Appointments">
-          <Card>
-            <Card.Header>
-              <h5>Upcoming Appointments</h5>
-            </Card.Header>
-            <Card.Body>
-              {isLoading.appointments ? (
-                <div className="text-center">
-                  <Spinner animation="border" />
-                </div>
-              ) : (
-                <Table striped hover responsive>
-                  <thead>
-                    <tr>
-                      <th>Patient</th>
-                      <th>Doctor</th>
-                      <th>Date & Time</th>
-                      <th>Reason</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {appointments.map(appointment => {
-                      const patient = patients.find(p => p._id === appointment.patientId);
-                      const doctor = doctors.find(d => d._id === appointment.doctorId);
-                      
-                      return (
-                        <tr key={appointment._id}>
-                          <td>{patient?.name || 'N/A'}</td>
-                          <td>Dr. {doctor?.name || 'N/A'}</td>
-                          <td>{formatDate(appointment.dateTime)}</td>
-                          <td>{appointment.reason}</td>
-                          <td>
-                            <span className={`badge ${
-                              appointment.status === 'completed' ? 'bg-success' :
-                              appointment.status === 'cancelled' ? 'bg-danger' :
-                              'bg-primary'
-                            }`}>
-                              {appointment.status}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </Table>
-              )}
-            </Card.Body>
-          </Card>
-        </Tab>
-      </Tabs>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Add Patient Modal */}
-      <Modal show={showPatientModal} onHide={() => setShowPatientModal(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>Add New Patient</Modal.Title>
-        </Modal.Header>
-        <Form onSubmit={handleCreatePatient}>
-          <Modal.Body>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Full Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="name"
-                    value={patientForm.name}
-                    onChange={handlePatientFormChange}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Email</Form.Label>
-                  <Form.Control
-                    type="email"
-                    name="email"
-                    value={patientForm.email}
-                    onChange={handlePatientFormChange}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Phone</Form.Label>
-                  <Form.Control
-                    type="tel"
-                    name="phone"
-                    value={patientForm.phone}
-                    onChange={handlePatientFormChange}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Date of Birth</Form.Label>
-                  <Form.Control
-                    type="date"
-                    name="dateOfBirth"
-                    value={patientForm.dateOfBirth}
-                    onChange={handlePatientFormChange}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Gender</Form.Label>
-                  <Form.Select
-                    name="gender"
-                    value={patientForm.gender}
-                    onChange={handlePatientFormChange}
-                    required
-                  >
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-              <Col md={12}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Address</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={2}
-                    name="address"
-                    value={patientForm.address}
-                    onChange={handlePatientFormChange}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowPatientModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit">
-              Create Patient
-            </Button>
-          </Modal.Footer>
-        </Form>
+      <Modal
+        isOpen={showPatientModal}
+        onClose={() => setShowPatientModal(false)}
+        title="Add New Patient"
+        onSave={handleCreatePatient}
+      >
+        <form onSubmit={handleCreatePatient}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+              <input
+                type="text"
+                name="name"
+                value={patientForm.name}
+                onChange={handlePatientFormChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                name="email"
+                value={patientForm.email}
+                onChange={handlePatientFormChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <input
+                type="tel"
+                name="phone"
+                value={patientForm.phone}
+                onChange={handlePatientFormChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+              <input
+                type="date"
+                name="dateOfBirth"
+                value={patientForm.dateOfBirth}
+                onChange={handlePatientFormChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+              <select
+                name="gender"
+                value={patientForm.gender}
+                onChange={handlePatientFormChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+              <textarea
+                name="address"
+                rows="3"
+                value={patientForm.address}
+                onChange={handlePatientFormChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              ></textarea>
+            </div>
+          </div>
+        </form>
       </Modal>
 
       {/* Book Appointment Modal */}
-      <Modal show={showAppointmentModal} onHide={() => setShowAppointmentModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>Book Appointment</Modal.Title>
-        </Modal.Header>
-        <Form onSubmit={handleBookAppointment}>
-          <Modal.Body>
-            <Form.Group className="mb-3">
-              <Form.Label>Patient</Form.Label>
-              <Form.Control
-                as="select"
-                name="patientId"
-                value={appointmentForm.patientId}
-                onChange={handleAppointmentFormChange}
-                required
-                disabled={!!selectedPatient}
-              >
-                <option value="">Select Patient</option>
-                {patients.map(patient => (
-                  <option key={patient._id} value={patient._id}>
-                    {patient.name} ({patient.phone})
-                  </option>
-                ))}
-              </Form.Control>
-            </Form.Group>
+      <Modal
+        isOpen={showAppointmentModal}
+        onClose={() => setShowAppointmentModal(false)}
+        title={selectedPatient ? `Book Appointment for ${selectedPatient.name}` : 'Book New Appointment'}
+        onSave={handleBookAppointment}
+        saveText="Book Appointment"
+      >
+        <form onSubmit={handleBookAppointment}>
+          <div className="space-y-4">
+            {!selectedPatient && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Patient</label>
+                <select
+                  name="patientId"
+                  value={appointmentForm.patientId}
+                  onChange={handleAppointmentFormChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  required
+                >
+                  <option value="">Select a patient</option>
+                  {patients.map(patient => (
+                    <option key={patient._id} value={patient._id}>
+                      {patient.name} ({patient.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             
-            <Form.Group className="mb-3">
-              <Form.Label>Doctor</Form.Label>
-              <Form.Control
-                as="select"
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Select Doctor</label>
+              <select
                 name="doctorId"
                 value={appointmentForm.doctorId}
                 onChange={handleAppointmentFormChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               >
-                <option value="">Select Doctor</option>
+                <option value="">Select a doctor</option>
                 {doctors.map(doctor => (
                   <option key={doctor._id} value={doctor._id}>
                     Dr. {doctor.name} ({doctor.specialization})
                   </option>
                 ))}
-              </Form.Control>
-            </Form.Group>
+              </select>
+            </div>
             
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Date</Form.Label>
-                  <DatePicker
-                    selected={appointmentForm.date}
-                    onChange={handleDateChange}
-                    minDate={new Date()}
-                    className="form-control"
-                    dateFormat="MMMM d, yyyy"
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Time</Form.Label>
-                  <Form.Select
-                    name="time"
-                    value={appointmentForm.time}
-                    onChange={handleAppointmentFormChange}
-                    required
-                  >
-                    <option value="">Select Time</option>
-                    {timeSlots.map(time => (
-                      <option key={time} value={time}>{time}</option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-            </Row>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <DatePicker
+                  selected={appointmentForm.date}
+                  onChange={handleDateChange}
+                  minDate={new Date()}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                <select
+                  name="time"
+                  value={appointmentForm.time}
+                  onChange={handleAppointmentFormChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  required
+                >
+                  <option value="">Select a time</option>
+                  {timeSlots.map((time, index) => (
+                    <option key={index} value={time}>
+                      {time}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             
-            <Form.Group className="mb-3">
-              <Form.Label>Reason for Visit</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Visit</label>
+              <textarea
                 name="reason"
+                rows="3"
                 value={appointmentForm.reason}
                 onChange={handleAppointmentFormChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Please describe the reason for the appointment..."
                 required
-              />
-            </Form.Group>
-            
-            <Form.Group className="mb-3">
-              <Form.Label>Status</Form.Label>
-              <Form.Select
-                name="status"
-                value={appointmentForm.status}
-                onChange={handleAppointmentFormChange}
-                required
-              >
-                <option value="scheduled">Scheduled</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </Form.Select>
-            </Form.Group>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowAppointmentModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit">
-              Book Appointment
-            </Button>
-          </Modal.Footer>
-        </Form>
+              ></textarea>
+            </div>
+          </div>
+        </form>
       </Modal>
-    </Container>
+    </div>
   );
 };
 
