@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { patientAPI, appointmentAPI, doctorAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { FaUserPlus, FaCalendarPlus, FaEdit, FaTrash, FaUserMd, FaUserInjured, FaPhone, FaEnvelope, FaMapMarkerAlt, FaVenusMars, FaBirthdayCake, FaClock, FaNotesMedical } from 'react-icons/fa';
+import { 
+  FaUserPlus, FaCalendarPlus, FaEdit, FaTrash, FaUserMd, 
+  FaUserInjured, FaPhone, FaEnvelope, FaMapMarkerAlt, 
+  FaVenusMars, FaBirthdayCake, FaClock, FaNotesMedical,
+  FaUserCircle, FaSignOutAlt, FaHome
+} from 'react-icons/fa';
 import { BsCalendarDate } from 'react-icons/bs';
 
 const ReceptionistDashboard = () => {
+  const [showDropdown, setShowDropdown] = useState(false);
   const [patients, setPatients] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [appointments, setAppointments] = useState([]);
@@ -19,6 +26,39 @@ const ReceptionistDashboard = () => {
     appointments: true
   });
   const [activeTab, setActiveTab] = useState('patients');
+  const navigate = useNavigate();
+  const receptionistInfo = JSON.parse(localStorage.getItem('receptionistInfo') || '{}');
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const closeDropdown = (e) => {
+      if (!e.target.closest('.dropdown-area')) setShowDropdown(false);
+    };
+    document.addEventListener('mousedown', closeDropdown);
+    return () => document.removeEventListener('mousedown', closeDropdown);
+  }, []);
+
+  const handleLogout = () => {
+    // Clear local storage
+    localStorage.removeItem('receptionistToken');
+    localStorage.removeItem('receptionistInfo');
+    
+    // Ensure navigation happens in the next tick to avoid any race conditions
+    setTimeout(() => {
+      navigate('/receptionist-login', { replace: true });
+    }, 0);
+  };
+
+  const navigateToProfile = () => {
+    // You can implement profile navigation here
+    navigate('/receptionist/profile');
+    setShowDropdown(false);
+  };
+
+  const navigateToHome = () => {
+    navigate('/receptionist/dashboard');
+    setShowDropdown(false);
+  };
 
   // Form states
   const [patientForm, setPatientForm] = useState({
@@ -216,8 +256,67 @@ const ReceptionistDashboard = () => {
   );
 
   return (
-    <div className="container mx-auto px-4 py-6">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6">Receptionist Dashboard</h2>
+    <div className="min-h-screen bg-gray-50">
+      {/* Navigation Bar */}
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-bold text-gray-800">CuraMind Reception</h1>
+            </div>
+            <div className="flex items-center">
+              <div className="ml-4 flex items-center md:ml-6">
+                <div className="ml-3 relative dropdown-area">
+                  <div>
+                    <button 
+                      type="button" 
+                      className="max-w-xs bg-white flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      onClick={() => setShowDropdown(!showDropdown)}
+                    >
+                      <span className="sr-only">Open user menu</span>
+                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                        <FaUserCircle className="h-6 w-6" />
+                      </div>
+                      <span className="ml-2 text-sm font-medium text-gray-700">
+                        {receptionistInfo.name || 'Receptionist'}
+                      </span>
+                    </button>
+                  </div>
+                  {showDropdown && (
+                    <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                      <div className="px-4 py-2 text-xs text-gray-500 border-b">
+                        <p className="font-medium">{receptionistInfo.email || 'receptionist@curamind.com'}</p>
+                      </div>
+                      <button
+                        onClick={navigateToHome}
+                        className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <FaHome className="inline mr-2" /> Home
+                      </button>
+                      <button
+                        onClick={navigateToProfile}
+                        className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <FaUserCircle className="inline mr-2" /> My Profile
+                      </button>
+                      <div className="border-t border-gray-100"></div>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                      >
+                        <FaSignOutAlt className="inline mr-2" /> Sign out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">Receptionist Dashboard</h2>
       
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
@@ -579,6 +678,7 @@ const ReceptionistDashboard = () => {
           </div>
         </form>
       </Modal>
+      </div>
     </div>
   );
 };

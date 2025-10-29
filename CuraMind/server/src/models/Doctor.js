@@ -61,6 +61,13 @@ doctorSchema.methods.generateAuthToken = function() {
   );
 };
 
+// Add query middleware to log all find queries
+doctorSchema.pre(/^find/, function(next) {
+  console.log('Doctor query:', JSON.stringify(this.getQuery(), null, 2));
+  console.log('Query options:', JSON.stringify(this.getOptions(), null, 2));
+  next();
+});
+
 // Create and export the model
 const Doctor = mongoose.models.Doctor || mongoose.model('Doctor', doctorSchema);
 

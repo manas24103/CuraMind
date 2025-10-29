@@ -91,17 +91,43 @@ export const login = async (req, res) => {
     console.log(`\n=== Login Attempt ===`);
     console.log(`Searching for ${userType} with email:`, email);
     
-    // Add additional query conditions based on user type
-    const query = { email: email.toLowerCase().trim() };
+    // For doctors and other user types, only check by email
+    // Only receptionists require the isActive check
+    let user;
+    const emailQuery = email.toLowerCase().trim();
     
-    // For doctor/receptionist, make sure the account is active
-    if (userType !== 'admin') {
-      query.isActive = true;
+    if (userType === 'receptionist') {
+      // For receptionists, include the isActive check
+      const query = {
+        email: emailQuery,
+        isActive: true
+      };
+      console.log('Receptionist login query:', JSON.stringify(query, null, 2));
+      
+      user = await UserModel.findOne(query)
+        .select('+password')
+        .setOptions({ sanitizeFilter: false })
+        .exec();
+    } else {
+      // For doctors, admins, and other types, just use the email
+      const query = { email: emailQuery };
+      console.log(`${userType} login query before execution:`, JSON.stringify(query, null, 2));
+      
+      // Log the model being used
+      console.log(`Using model:`, UserModel.modelName);
+      
+      // Create a query and log it before execution
+      const queryObj = UserModel.findOne(query).select('+password');
+      console.log('Mongoose query object before exec:', JSON.stringify(queryObj.getQuery(), null, 2));
+      
+      // Execute the query
+      user = await queryObj.exec();
+      
+      // Log the final query that was executed (if available)
+      if (queryObj._mongooseOptions) {
+        console.log('Final query options:', JSON.stringify(queryObj._mongooseOptions, null, 2));
+      }
     }
-    
-    console.log('Querying database with:', { model: userType, query });
-    
-    const user = await UserModel.findOne(query).select('+password').exec();
     
     if (!user) {
       console.warn(`❌ Login failed: No ${userType} found with email ${email}`);

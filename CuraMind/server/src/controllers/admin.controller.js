@@ -71,15 +71,11 @@ class AdminController {
         });
       }
 
-      // Hash password
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-
-      // Create doctor with validated data
+      // Create doctor with validated data - password will be hashed by pre-save hook
       const doctor = await Doctor.create({
         name,
         email,
-        password: hashedPassword,
+        password, // Will be hashed by pre-save hook
         specialization,
         phone: phone || undefined,
         experience: experienceNum, // Explicitly set as number
@@ -119,15 +115,11 @@ class AdminController {
         });
       }
 
-      // Hash password
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-
-      // Create receptionist
+      // Create receptionist - password will be hashed by pre-save hook
       const receptionist = await Receptionist.create({
         name,
         email,
-        password: hashedPassword,
+        password, // Will be hashed by pre-save hook
         phone,
         role
       });
