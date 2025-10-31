@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FaUserCircle, FaSignOutAlt, FaHome } from 'react-icons/fa';
-import Header from '../components/Header';
-import Footer from '../components/Footer';
+import { FaUserCircle, FaSignOutAlt, FaHome, FaUserMd, FaCalendarAlt, FaFilePrescription, FaRobot, FaChevronDown } from 'react-icons/fa';
 import OverviewCards from './DoctorDashboard/OverviewCards';
 import AppointmentsTable from './DoctorDashboard/AppointmentsTable';
 import RecentPrescriptions from './DoctorDashboard/RecentPrescriptions';
@@ -17,7 +15,15 @@ const DoctorDashboard = () => {
 
   useEffect(() => {
     const token = localStorage.getItem('doctorToken');
+    const info = localStorage.getItem('doctorInfo');
+    
+    console.log('DoctorDashboard mounted', { token, hasInfo: !!info });
+    
     if (!token) {
+      console.log('No doctor token found, redirecting to login');
+      navigate('/doctor-login');
+    } else if (!info) {
+      console.log('No doctor info found, redirecting to login');
       navigate('/doctor-login');
     }
   }, [navigate]);
@@ -48,72 +54,95 @@ const DoctorDashboard = () => {
     setShowDropdown(false);
   };
 
+  // Get doctor's name from localStorage or use a default
+  const doctorName = doctorInfo?.name || 'Doctor';
+  const doctorEmail = doctorInfo?.email || '';
+
   return (
-    <div className="d-flex flex-column min-vh-100">
-      <Header />
-      <div className="container-fluid bg-light py-5 mt-5">
-        <div className="container">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h3 className="fw-bold text-primary mb-0">Doctor Dashboard</h3>
-            <div className="dropdown-area position-relative">
+    <div className="min-h-screen bg-gray-50">
+      {/* Main Content */}
+      <div className="py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Header with User Dropdown */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
+            <div className="mb-4 sm:mb-0">
+              <h1 className="text-2xl font-bold text-gray-900">Doctor Dashboard</h1>
+              <p className="mt-1 text-sm text-gray-500">Welcome back, {doctorName}</p>
+            </div>
+            
+            {/* User Dropdown */}
+            <div className="relative dropdown-area">
               <button 
-                className="btn btn-outline-primary d-flex align-items-center gap-2"
                 onClick={() => setShowDropdown(!showDropdown)}
+                className="flex items-center space-x-2 bg-white px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
               >
-                <FaUserCircle size={20} />
-                <span>{doctorInfo.name || 'Doctor'}</span>
+                <FaUserCircle className="h-6 w-6 text-gray-500" />
+                <span className="font-medium text-gray-700">{doctorName}</span>
+                <FaChevronDown className={`h-3 w-3 text-gray-500 transition-transform ${showDropdown ? 'transform rotate-180' : ''}`} />
               </button>
               
               {showDropdown && (
-                <div className="dropdown-menu show position-absolute end-0 mt-2" style={{ minWidth: '200px' }}>
-                  <div className="dropdown-header fw-bold text-muted small">Welcome, {doctorInfo.name || 'Doctor'}</div>
-                  <div className="dropdown-divider"></div>
-                  <button 
-                    className="dropdown-item d-flex align-items-center gap-2"
-                    onClick={navigateToHome}
-                  >
-                    <FaHome /> Home
-                  </button>
-                  <button 
-                    className="dropdown-item d-flex align-items-center gap-2"
-                    onClick={navigateToProfile}
-                  >
-                    <FaUserCircle /> My Profile
-                  </button>
-                  <div className="dropdown-divider"></div>
-                  <button 
-                    className="dropdown-item d-flex align-items-center gap-2 text-danger"
-                    onClick={handleLogout}
-                  >
-                    <FaSignOutAlt /> Logout
-                  </button>
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg overflow-hidden z-10 border border-gray-100">
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <p className="text-sm font-medium text-gray-900">{doctorName}</p>
+                    <p className="text-xs text-gray-500 truncate">{doctorEmail}</p>
+                  </div>
+                  <div className="py-1">
+                    <button
+                      onClick={navigateToHome}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <FaHome className="mr-3 h-5 w-5 text-gray-400" />
+                      Dashboard Home
+                    </button>
+                    <button
+                      onClick={navigateToProfile}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <FaUserCircle className="mr-3 h-5 w-5 text-gray-400" />
+                      My Profile
+                    </button>
+                  </div>
+                  <div className="border-t border-gray-100 py-1">
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <FaSignOutAlt className="mr-3 h-5 w-5 text-red-400" />
+                      Sign out
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
           {/* Tabs */}
-          <ul className="nav nav-tabs mb-4">
-            {["overview", "appointments", "prescriptions", "ai"].map((tab) => (
-              <li className="nav-item" key={tab}>
+          <div className="border-b border-gray-200 mb-6">
+            <nav className="-mb-px flex space-x-8">
+              {[
+                { id: 'overview', icon: <FaUserMd className="mr-2 h-4 w-4" />, label: 'Overview' },
+                { id: 'appointments', icon: <FaCalendarAlt className="mr-2 h-4 w-4" />, label: 'Appointments' },
+                { id: 'prescriptions', icon: <FaFilePrescription className="mr-2 h-4 w-4" />, label: 'Prescriptions' },
+                { id: 'ai', icon: <FaRobot className="mr-2 h-4 w-4" />, label: 'AI Assistant' }
+              ].map((tab) => (
                 <button
-                  className={`nav-link ${activeTab === tab ? "active fw-bold" : ""}`}
-                  onClick={() => setActiveTab(tab)}
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
                 >
-                  {tab === "overview"
-                    ? "Overview"
-                    : tab === "appointments"
-                    ? "Appointments"
-                    : tab === "prescriptions"
-                    ? "Prescriptions"
-                    : "AI Generator"}
+                  {tab.icon}
+                  {tab.label}
                 </button>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </nav>
+          </div>
 
           {/* Tab Content */}
-          <div className="tab-content">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             {activeTab === "overview" && <OverviewCards />}
             {activeTab === "appointments" && <AppointmentsTable />}
             {activeTab === "prescriptions" && <RecentPrescriptions />}
@@ -121,7 +150,6 @@ const DoctorDashboard = () => {
           </div>
         </div>
       </div>
-      <Footer />
     </div>
   );
 };

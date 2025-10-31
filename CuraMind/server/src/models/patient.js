@@ -50,9 +50,11 @@ const patientSchema = new mongoose.Schema({
         type: addressSchema,
         required: [true, 'Address is required']
     },
-    doctor: {
-        type:mongoose.Schema.Types.ObjectId,
-        ref: 'Doctor'
+    assignedDoctor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Doctor',
+        required: false,
+        default: null
     },
     appointments: [{
         type: mongoose.Schema.Types.ObjectId,

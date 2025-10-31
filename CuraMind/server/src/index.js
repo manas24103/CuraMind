@@ -15,7 +15,8 @@ import patientRoutes from './routes/patient.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
 import testRoutes from './routes/test.routes.js';
 import adminRoutes from './routes/admin.routes.js';
-import  errorHandler  from './middleware/error.middleware.js';
+import receptionistRoutes from './routes/receptionist.routes.js';
+import errorHandler from './middleware/error.middleware.js';
 import connectDB from './config/db.js';
 
 // Initialize express
@@ -28,7 +29,6 @@ const __dirname = path.dirname(__filename);
 
 // Load environment variables from the project root .env file
 const envPath = path.resolve(process.cwd(), '.env');
-console.log('Loading .env from:', envPath);
 
 // Load environment variables
 dotenv.config({ path: envPath });
@@ -38,10 +38,54 @@ if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'development';
 }
 
-// Debug log loaded environment variables
-console.log('Environment Variables:');
-console.log('- PORT:', process.env.PORT );
-console.log('- MONGO_URI:', process.env.MONGO_URI ? '***' : 'Not set');
+// CORS configuration
+const corsOptions = {
+  origin: ['http://localhost:3000', 'http://localhost:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 204,
+  maxAge: 86400 // 24 hours
+};
+
+// Log all incoming requests
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body);
+  next();
+});
+
+// Enable CORS pre-flight
+app.options('*', cors(corsOptions));
+
+// Enable CORS for all routes
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    console.log('Handling preflight request');
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    return res.status(204).send();
+  }
+  next();
+});
+
+// Request logging middleware (disabled in production)
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+    console.log('Headers:', req.headers);
+    if (req.method === 'POST' || req.method === 'PUT') {
+      console.log('Body:', req.body);
+    }
+    next();
+  });
+}
 
 // Body parser middleware
 app.use(express.json());
@@ -89,8 +133,6 @@ cron.schedule('0 * * * *', async () => {
     console.error('Error cleaning up temporary patients:', error);
   }
 });
-
-console.log('Using database URL:', config.databaseUrl);
 
 // Middleware
 app.use(express.json());
@@ -181,13 +223,14 @@ app.use('/api/patients', patientRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/receptionist', receptionistRoutes);
 
-// Print all routes after they're registered
-process.nextTick(() => {
-  console.log('\n=== Available Routes ===');
-  printRoutes(app._router.stack);
-  console.log('========================\n');
-});
+// Print all routes after they're registered in development
+if (process.env.NODE_ENV === 'development') {
+  process.nextTick(() => {
+    printRoutes(app._router.stack);
+  });
+}
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -211,30 +254,19 @@ const startServer = async () => {
   try {
     await connectDB(config.databaseUrl);
     const server = app.listen(PORT, () => {
-      console.log(`
----------------------------------------------
-  🚀 MediTrust Backend Running Successfully!
----------------------------------------------
-  🌐 URL: http://localhost:${PORT}
-  ⚙️  Mode: ${process.env.NODE_ENV || 'development'}
-  🗄️  Database: ${config.databaseUrl.includes('@') ? 'MongoDB Atlas' : 'Local MongoDB'}
----------------------------------------------
-`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`Server running on port ${PORT}`);
+      }
     });
 
     // Graceful shutdown handler
     const shutdown = async () => {
-      console.log('\n🛑 Shutting down server...');
-      
-      // Close the server
       server.close(() => {
-        console.log('✅ Server closed');
         process.exit(0);
       });
 
       // Force close server after 10 seconds
       setTimeout(() => {
-        console.error('❌ Forcing server shutdown');
         process.exit(1);
       }, 10000);
     };

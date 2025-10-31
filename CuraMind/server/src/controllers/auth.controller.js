@@ -13,11 +13,7 @@ const userModels = {
 // Verify token controller
 export const verifyToken = (req, res) => {
   try {
-    console.log('Verify token controller called with user:', req.user);
-    
-    // If middleware passed, token is valid
     if (!req.user) {
-      console.warn('No user data found in verifyToken');
       return res.status(200).json({
         success: false,
         message: 'No user data found in request'
@@ -26,8 +22,6 @@ export const verifyToken = (req, res) => {
 
     // Return user data in the expected format
     const { _id, name, email, role } = req.user;
-    
-    console.log('Token verified successfully for user:', { _id, email, role });
     
     const response = {
       success: true,
@@ -39,12 +33,9 @@ export const verifyToken = (req, res) => {
       }
     };
     
-    console.log('Sending verify-token response:', JSON.stringify(response, null, 2));
-    
     res.status(200).json(response);
     
   } catch (error) {
-    console.error('Token verification error in controller:', error);
     res.status(200).json({
       success: false,
       message: 'Invalid or expired token',
@@ -56,7 +47,7 @@ export const verifyToken = (req, res) => {
 // Login controller
 export const login = async (req, res) => {
   try {
-    console.log('Login request received:', {
+      console.log('Login request received:', {
       body: req.body,
       headers: req.headers,
       ip: req.ip,
@@ -75,55 +66,39 @@ export const login = async (req, res) => {
       });
     }
     
-    console.log(`Attempting login for ${userType} with email: ${email}`);
-
-    // Get the appropriate model based on user type
     const UserModel = userModels[userType];
     if (!UserModel) {
-      console.error(`Invalid user type specified: ${userType}`);
       return res.status(400).json({
         success: false,
         message: 'Invalid user type. Must be one of: ' + Object.keys(userModels).join(', ')
       });
     }
 
-    // Find user by email
-    console.log(`\n=== Login Attempt ===`);
-    console.log(`Searching for ${userType} with email:`, email);
-    
-    // For doctors and other user types, only check by email
-    // Only receptionists require the isActive check
     let user;
     const emailQuery = email.toLowerCase().trim();
     
     if (userType === 'receptionist') {
-      // For receptionists, include the isActive check
       const query = {
         email: emailQuery,
         isActive: true
       };
-      console.log('Receptionist login query:', JSON.stringify(query, null, 2));
       
       user = await UserModel.findOne(query)
         .select('+password')
         .setOptions({ sanitizeFilter: false })
         .exec();
     } else {
-      // For doctors, admins, and other types, just use the email
       const query = { email: emailQuery };
-      console.log(`${userType} login query before execution:`, JSON.stringify(query, null, 2));
       
-      // Log the model being used
-      console.log(`Using model:`, UserModel.modelName);
+      user = await UserModel.findOne(query)
+        .select('+password')
+        .setOptions({ sanitizeFilter: false })
+        .exec();
       
-      // Create a query and log it before execution
       const queryObj = UserModel.findOne(query).select('+password');
-      console.log('Mongoose query object before exec:', JSON.stringify(queryObj.getQuery(), null, 2));
       
-      // Execute the query
       user = await queryObj.exec();
       
-      // Log the final query that was executed (if available)
       if (queryObj._mongooseOptions) {
         console.log('Final query options:', JSON.stringify(queryObj._mongooseOptions, null, 2));
       }
@@ -139,19 +114,6 @@ export const login = async (req, res) => {
         timestamp: new Date().toISOString()
       });
     }
-    
-    console.log(`✅ Found user:`, { 
-      id: user._id, 
-      email: user.email,
-      hasPassword: !!user.password,
-      userType: user.role || userType
-    });
-
-    // Check if password matches
-    console.log('\n🔑 Password Verification');
-    console.log('---------------------');
-    console.log('Input password length:', password ? '***' : 'MISSING');
-    console.log('Stored password hash exists:', !!user.password);
     
     try {
       // Use the model's comparePassword method
@@ -175,23 +137,17 @@ export const login = async (req, res) => {
       });
     }
     
-    console.log('✅ Password verified successfully');
     
-    // Generate JWT
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       const errorMsg = 'JWT_SECRET is not configured';
-      console.error(errorMsg);
       return res.status(500).json({ 
         success: false, 
         message: 'Server configuration error',
         error: process.env.NODE_ENV === 'development' ? errorMsg : undefined
       });
     }
-
-    console.log('Generating JWT token...');
     
-    // Create payload with user type
     const payload = { 
       id: user._id.toString(),
       role: userType,
@@ -222,13 +178,9 @@ export const login = async (req, res) => {
       }
     };
     
-    console.log('Login successful for user:', responseData.data.email);
-    console.log('Login response data:', responseData);
-    
     return res.status(200).json(responseData);
     
   } catch (error) {
-    console.error('❌ Error during login process:', error);
     return res.status(500).json({
       success: false,
       message: 'An error occurred during login',

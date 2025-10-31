@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from './services/api';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import AOS from 'aos';
 import { ToastContainer, toast } from 'react-toastify';
 import 'aos/dist/aos.css';
@@ -25,22 +25,35 @@ import ReceptionistDashboard from './pages/receptionist/ReceptionistDashboard.js
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isValid, setIsValid] = useState(false);
-  const token = localStorage.getItem('token');
-  const userType = localStorage.getItem('userType');
+  const [userType, setUserType] = useState('');
+  const navigate = useNavigate();
   
   useEffect(() => {
-    const verifyToken = async () => {
+    const verifyAuth = async () => {
+      // First check for doctor token (which is stored separately)
+      const doctorToken = localStorage.getItem('doctorToken');
+      const doctorInfo = localStorage.getItem('doctorInfo');
+      
+      if (doctorToken && doctorInfo) {
+        // Doctor is logged in
+        setUserType('doctor');
+        setIsValid(true);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check for regular user token
+      const token = localStorage.getItem('token');
       if (!token) {
         setIsLoading(false);
         return;
       }
       
-      // Check if we have a token and user data
+      // For non-doctor users
       const userType = localStorage.getItem('userType');
       const userData = localStorage.getItem('user');
       
-      // If we have all required auth data, consider the user authenticated
-      // The token will be verified on the first API call via the interceptor
+      setUserType(userType);
       setIsValid(!!(token && userType && userData));
       
       if (!token || !userType || !userData) {
@@ -52,8 +65,16 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
       setIsLoading(false);
     };
     
-    verifyToken();
-  }, [token]);
+    verifyAuth();
+  }, []);
+  
+  // Handle unauthorized access
+  useEffect(() => {
+    if (!isLoading && !isValid) {
+      // If we're not loading but not valid, redirect to login
+      navigate('/login');
+    }
+  }, [isLoading, isValid, navigate]);
 
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">
@@ -61,7 +82,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     </div>;
   }
   
-  if (!token || !isValid) {
+  if ((!localStorage.getItem('doctorToken') && !localStorage.getItem('token')) || !isValid) {
     return <Navigate to="/login" replace />;
   }
   
@@ -158,19 +179,26 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         
-        {/* Toast Container for notifications */}
-        <ToastContainer 
-          position="top-right"
-          autoClose={5000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="light"
-        />
+        {/* Toast Container for notifications - Using a stable key to force remount if needed */}
+        <div key="toast-container">
+          <ToastContainer 
+            position="top-right"
+            autoClose={5000}
+            hideProgressBar={false}
+            newestOnTop={false}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="light"
+            closeButton={false}  // Disable default close button to prevent issues
+            className="toast-container"
+            toastClassName="toast"
+            bodyClassName="toast-body"
+            progressClassName="toast-progress"
+          />
+        </div>
       </main>
     </div>
   );

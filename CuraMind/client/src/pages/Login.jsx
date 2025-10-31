@@ -23,57 +23,41 @@ const Login = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  // Check if user is already logged in
+  // Check if user is already logged in - runs only on component mount
   useEffect(() => {
-    // Skip token verification if we're in the middle of a login
-    if (isLoading) return;
-    
     const checkAuth = () => {
-      const token = localStorage.getItem("token");
-      const userType = localStorage.getItem("userType");
-      const userData = localStorage.getItem("user");
-
-      if (!token || !userType || !userData) {
-        console.log('Missing auth data in localStorage');
-        localStorage.removeItem('token');
-        localStorage.removeItem('userType');
-        localStorage.removeItem('user');
-        return;
-      }
+      // Skip if we're in the middle of a login
+      if (isLoading) return;
+      localStorage.removeItem('userType');
+      localStorage.removeItem('user');
+      const token = localStorage.getItem('token');
+      const userType = localStorage.getItem('userType');
+      
+      // If no token or userType, no need to proceed
+      if (!token || !userType) return;
 
       try {
-        const user = JSON.parse(userData);
         const userConfig = userTypes.find((t) => t.value === userType);
         
         if (!userConfig) {
-          console.warn('Invalid userType in localStorage:', userType);
-          localStorage.removeItem('token');
-          localStorage.removeItem('userType');
-          localStorage.removeItem('user');
+          console.warn('No dashboard configured for user role:', userType);
+          localStorage.clear();
           return;
         }
 
-        // If we have a valid token and user data, just redirect
-        // Token will be verified on the first API call via the interceptor
+        // Only redirect if we have a valid token and user data
         console.log('User already logged in, redirecting to dashboard');
-        navigate(`/${userConfig.dashboard}`);
+        navigate(`/${userConfig.dashboard}`, { replace: true });
       } catch (error) {
-        console.error('Error during token verification:', {
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status
-        });
-        // Clear auth data on error
-        localStorage.removeItem('token');
-        localStorage.removeItem('userType');
-        localStorage.removeItem('user');
+        console.error('Error during auth check:', error);
+        localStorage.clear();
       }
     };
     
     // Add a small delay to prevent flash
     const timer = setTimeout(checkAuth, 100);
     return () => clearTimeout(timer);
-  }, [navigate, userTypes]);
+  }, [navigate, userTypes, isLoading]);
 
   // Handle form input changes
   const handleChange = (e) => {
@@ -88,80 +72,80 @@ const Login = () => {
     setIsLoading(true);
 
     try {
+      // Clear any existing auth data
+      localStorage.removeItem('token');
+      localStorage.removeItem('userType');
+      localStorage.removeItem('user');
+      localStorage.removeItem('doctorToken');
+      localStorage.removeItem('doctorInfo');
+
       // Convert userType to match what the server expects
       const serverUserType = form.userType === 'admin' ? 'admin' : 
                            form.userType === 'receptionist' ? 'receptionist' : 'doctor';
       
       console.log('Attempting login with:', {
         email: form.email.trim().toLowerCase(),
-        userType: serverUserType,
-        password: form.password ? '***' : 'MISSING_PASSWORD'
+        userType: serverUserType
       });
       
-      // Make login request
       const response = await authAPI.login({
         email: form.email.trim().toLowerCase(),
         password: form.password,
         userType: serverUserType
       });
       
-      console.log('Login response:', response);
-      
       if (!response.data || !response.data.token) {
         throw new Error('Invalid response from server');
       }
       
       const { token, data: userData } = response.data;
-      console.log('Login successful, token:', token);
-      console.log('User data from login:', userData);
       
       if (!userData || !userData.role) {
         throw new Error('Invalid user data received from server');
       }
       
-      // Store token and user data in localStorage
-      localStorage.setItem('token', token);
-      localStorage.setItem('userType', userData.role); // Use role from server response
-      localStorage.setItem('user', JSON.stringify(userData));
-      
-      // Find the dashboard path based on user role
-      const userConfig = userTypes.find(t => t.value === userData.role);
-      if (userConfig) {
-        console.log(`Redirecting ${userData.role} to dashboard:`, `/${userConfig.dashboard}`);
-        navigate(`/${userConfig.dashboard}`, { replace: true });
+      // Store the new auth data based on user type
+      if (userData.role === 'doctor') {
+        localStorage.setItem('doctorToken', token);
+        localStorage.setItem('doctorInfo', JSON.stringify(userData));
       } else {
-        console.error('No dashboard configured for role:', userData.role);
-        throw new Error(`No dashboard configured for user type: ${userData.role}`);
+        localStorage.setItem('token', token);
+        localStorage.setItem('userType', userData.role);
+        localStorage.setItem('user', JSON.stringify(userData));
       }
-
-    } catch (error) {
-      console.error("Login error:", {
-        message: error.message,
-        response: {
-          status: error.response?.status,
-          data: error.response?.data,
-          headers: error.response?.headers
-        },
-        config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          data: error.config?.data
-        }
-      });
-      
-      let errorMessage = "Login failed. Please try again.";
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.status === 401) {
-        errorMessage = "Invalid email or password. Please try again.";
-      }
-      
-      setError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setIsLoading(false);
+    
+    // Find the dashboard path based on user role
+    const userConfig = userTypes.find(t => t.value === userData.role);
+    if (userConfig) {
+      console.log(`Redirecting ${userData.role} to dashboard:`, `/${userConfig.dashboard}`);
+      navigate(`/${userConfig.dashboard}`, { replace: true });
+    } else {
+      throw new Error(`No dashboard configured for user type: ${userData.role}`);
     }
-  };
+
+  } catch (error) {
+    console.error("Login error:", error);
+    let errorMessage = "Login failed. Please check your credentials and try again.";
+    
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    } else if (error.response?.status === 401) {
+      errorMessage = "Invalid email or password. Please try again.";
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    setError(errorMessage);
+    toast.error(errorMessage);
+    
+    // Clear any partial auth data on error
+    localStorage.removeItem('token');
+    localStorage.removeItem('userType');
+    localStorage.removeItem('user');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">

@@ -26,13 +26,11 @@ class AdminController {
           success: false,
           message: 'Missing required fields. Required: name, email, password, specialization, experience',
           received: { name: !!name, email: !!email, password: !!password, 
-                     specialization: !!specialization, experience: experience !== undefined }
+                      specialization: !!specialization, experience: experience !== undefined }
         });
       }
 
-      // Debug log the experience field
-      console.log('Raw experience value:', experience, 'Type:', typeof experience);
-      
+                                  
       // Convert experience to number and validate
       let experienceNum;
       try {
@@ -49,10 +47,7 @@ class AdminController {
           throw new Error('Must be a non-negative integer');
         }
         
-        console.log('Successfully converted experience to number:', experienceNum, 'Type:', typeof experienceNum);
-        
       } catch (error) {
-        console.error('Experience validation failed:', error.message);
         return res.status(400).json({
           success: false,
           message: `Invalid experience value: ${error.message}`,
@@ -92,7 +87,6 @@ class AdminController {
         data: doctorData
       });
     } catch (error) {
-      console.error('Create doctor error:', error);
       res.status(500).json({
         success: false,
         message: 'Error creating doctor',
@@ -133,7 +127,6 @@ class AdminController {
         data: receptionistData
       });
     } catch (error) {
-      console.error('Create receptionist error:', error);
       res.status(500).json({
         success: false,
         message: 'Error creating receptionist',
@@ -161,7 +154,6 @@ class AdminController {
         message: 'Doctor deleted successfully'
       });
     } catch (error) {
-      console.error('Delete doctor error:', error);
       res.status(500).json({
         success: false,
         message: 'Error deleting doctor',
@@ -189,7 +181,6 @@ class AdminController {
         message: 'Receptionist deleted successfully'
       });
     } catch (error) {
-      console.error('Delete receptionist error:', error);
       res.status(500).json({
         success: false,
         message: 'Error deleting receptionist',
@@ -209,7 +200,6 @@ class AdminController {
         data: doctors
       });
     } catch (error) {
-      console.error('Get all doctors error:', error);
       res.status(500).json({
         success: false,
         message: 'Error fetching doctors',
@@ -229,7 +219,6 @@ class AdminController {
         data: receptionists
       });
     } catch (error) {
-      console.error('Get all receptionists error:', error);
       res.status(500).json({
         success: false,
         message: 'Error fetching receptionists',

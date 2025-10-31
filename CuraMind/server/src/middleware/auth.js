@@ -15,7 +15,6 @@ const userModels = {
 export const authenticate = (requiredRole) => {
   return async (req, res, next) => {
     try {
-      console.log('Auth middleware triggered for path:', req.path);
       
       // For verify-token endpoint, we want to verify the token but not require a specific role
       const isVerifyTokenEndpoint = req.path.endsWith('/verify-token');
@@ -104,19 +103,8 @@ export const authenticate = (requiredRole) => {
         const userObj = user.toObject();
         userObj.role = userType; // Ensure role is set
         req.user = userObj;
-        
-        // For debugging
-        console.log('Authenticated user:', {
-          id: user._id,
-          email: user.email,
-          role: userType,
-          name: user.name
-        });
-        
         next();
       } catch (error) {
-        console.error('Token verification error:', error);
-        
         // Handle specific JWT errors
         if (error.name === 'TokenExpiredError') {
           return res.status(401).json({ 
@@ -161,7 +149,6 @@ export const authenticate = (requiredRole) => {
         });
       }
     } catch (error) {
-      console.error('Unexpected error in authentication middleware:', error);
       return res.status(500).json({
         success: false,
         error: 'Internal server error during authentication'

@@ -3,11 +3,8 @@ import Patient from '../models/patient.js';
 export class PatientController {
     async getAllPatients(req, res) {
         try {
-            console.log('Fetching all patients...');
             const patients = await Patient.find().lean();
-            console.log(`Found ${patients.length} patients`);
             
-            // Format the response consistently
             const response = {
                 success: true,
                 count: patients.length,
@@ -16,7 +13,6 @@ export class PatientController {
             
             res.json(response);
         } catch (error) {
-            console.error('Error in getAllPatients:', error);
             res.status(500).json({ 
                 success: false,
                 message: 'Error fetching patients',
@@ -49,14 +45,30 @@ export class PatientController {
 
     async updatePatient(req, res) {
         try {
+            const { doctorId, ...updateData } = req.body;
+            
+            // If doctorId is provided, validate it exists
+            if (doctorId) {
+                const doctor = await Doctor.findById(doctorId);
+                if (!doctor) {
+                    return res.status(404).json({ message: 'Doctor not found' });
+                }
+                updateData.assignedDoctor = doctorId;
+            } else if ('doctorId' in req.body) {
+                // If doctorId is explicitly set to null/undefined, clear the assignedDoctor
+                updateData.assignedDoctor = null;
+            }
+
             const patient = await Patient.findByIdAndUpdate(
                 req.params.id,
-                req.body,
-                { new: true }
-            );
+                updateData,
+                { new: true, runValidators: true }
+            ).populate('assignedDoctor', 'name specialization email');
+            
             if (!patient) {
                 return res.status(404).json({ message: 'Patient not found' });
             }
+            
             res.json(patient);
         } catch (error) {
             res.status(400).json({ message: 'Error updating patient', error });

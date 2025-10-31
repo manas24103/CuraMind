@@ -1,503 +1,739 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { patientAPI, appointmentAPI, doctorAPI } from '../../services/api';
+import api, { receptionistAPI } from '../../services/api';
 import { toast } from 'react-toastify';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
 import { 
-  FaUserPlus, FaCalendarPlus, FaEdit, FaTrash, FaUserMd, 
-  FaUserInjured, FaPhone, FaEnvelope, FaMapMarkerAlt, 
-  FaVenusMars, FaBirthdayCake, FaClock, FaNotesMedical,
-  FaUserCircle, FaSignOutAlt, FaHome
+  FaUserPlus, FaCalendarPlus, FaUserInjured, 
+  FaPhone, FaEnvelope, FaBirthdayCake,
+  FaUserCircle, FaSignOutAlt, FaHome, FaCalendarAlt, FaUserMd, FaUser, FaEdit, FaTrash, FaSearch, FaPlus, FaTimes, FaSyncAlt
 } from 'react-icons/fa';
-import { BsCalendarDate } from 'react-icons/bs';
+
+// Reusable tab component
+const Tab = ({ active, onClick, children }) => (
+  <button
+    onClick={onClick}
+    className={`px-4 py-2 font-medium text-sm rounded-t-lg ${
+      active
+        ? 'bg-white text-blue-600 border-t-2 border-blue-600'
+        : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+    }`}
+  >
+    {children}
+  </button>
+);
+
+// Reusable modal component
+const Modal = ({ isOpen, onClose, title, onSave, saveText, disabled, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+      <div className="bg-white w-full max-w-lg rounded-lg shadow-lg overflow-hidden">
+        <div className="flex justify-between items-center p-4 border-b">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-800">
+            ×
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+        <div className="flex justify-end gap-2 p-4 border-t bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            disabled={disabled}
+            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ${
+              disabled && 'opacity-50 cursor-not-allowed'
+            }`}
+          >
+            {saveText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ReceptionistDashboard = () => {
-  const [showDropdown, setShowDropdown] = useState(false);
+  const navigate = useNavigate();
+  const isMounted = useRef(true);
+
+  const [activeTab, setActiveTab] = useState('patients');
   const [patients, setPatients] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [appointments, setAppointments] = useState([]);
-  const [showPatientModal, setShowPatientModal] = useState(false);
-  const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [isLoading, setIsLoading] = useState({
-    patients: true,
-    doctors: true,
-    appointments: true
-  });
-  const [activeTab, setActiveTab] = useState('patients');
-  const navigate = useNavigate();
-  const receptionistInfo = JSON.parse(localStorage.getItem('receptionistInfo') || '{}');
+  const [showPatientModal, setShowPatientModal] = useState(false);
+  const [showBookModal, setShowBookModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [editingPatient, setEditingPatient] = useState(null);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const closeDropdown = (e) => {
-      if (!e.target.closest('.dropdown-area')) setShowDropdown(false);
-    };
-    document.addEventListener('mousedown', closeDropdown);
-    return () => document.removeEventListener('mousedown', closeDropdown);
-  }, []);
-
-  const handleLogout = () => {
-    // Clear local storage
-    localStorage.removeItem('receptionistToken');
-    localStorage.removeItem('receptionistInfo');
-    
-    // Ensure navigation happens in the next tick to avoid any race conditions
-    setTimeout(() => {
-      navigate('/receptionist-login', { replace: true });
-    }, 0);
-  };
-
-  const navigateToProfile = () => {
-    // You can implement profile navigation here
-    navigate('/receptionist/profile');
-    setShowDropdown(false);
-  };
-
-  const navigateToHome = () => {
-    navigate('/receptionist/dashboard');
-    setShowDropdown(false);
-  };
-
-  // Form states
   const [patientForm, setPatientForm] = useState({
     name: '',
-    email: '',
+    age: '',
+    gender: '',
     phone: '',
-    address: '',
-    dateOfBirth: '',
-    gender: 'male'
+    email: '',
+    bloodGroup: '',
+    assignedDoctor: '',
+    address: {
+      street: '',
+      city: '',
+      state: '',
+      pincode: ''
+    }
   });
 
   const [appointmentForm, setAppointmentForm] = useState({
-    patientId: '',
     doctorId: '',
-    date: new Date(),
+    date: new Date().toISOString().split('T')[0],
     time: '',
     reason: '',
-    status: 'scheduled'
+    patientId: ''
   });
 
-  // Available time slots
-  const timeSlots = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-    '15:00', '15:30', '16:00', '16:30', '17:00'
-  ];
+  // Helper function to find a patient's doctor from appointments
+  const findDoctorForPatient = (patientId, appointmentsData, doctorsList) => {
+    if (!patientId) return null;
+    
+    // Find the most recent appointment for this patient
+    const patientAppointments = appointmentsData
+      .filter(appt => {
+        const apptPatientId = appt.patient?._id || appt.patientId || appt.patient;
+        return apptPatientId === patientId && (appt.doctorId || appt.doctor);
+      })
+      .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    
+    if (patientAppointments.length > 0) {
+      const latestAppointment = patientAppointments[0];
+      const doctorId = latestAppointment.doctor?._id || latestAppointment.doctorId?._id || latestAppointment.doctorId;
+      
+      if (!doctorId) return null;
+      
+      // Find the doctor in the doctors list
+      return doctorsList.find(d => 
+        d._id === doctorId || d.id === doctorId
+      ) || { _id: doctorId, name: 'Unknown Doctor' };
+    }
+    
+    return null;
+  };
 
-  // Fetch data
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [patientsRes, doctorsRes, appointmentsRes] = await Promise.all([
-          patientAPI.getPatients(),
-          doctorAPI.getDoctors(),
-          appointmentAPI.getAppointments()
-        ]);
-
-        setPatients(patientsRes.data);
-        setDoctors(doctorsRes.data);
-        setAppointments(appointmentsRes.data);
+  // Fetch all data
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      
+      // Fetch all data in parallel
+      const [patientsRes, doctorsRes, apptRes] = await Promise.all([
+        receptionistAPI.getPatients(),
+        receptionistAPI.getDoctors(),
+        receptionistAPI.getAppointments(),
+      ]);
+      
+      // Process doctors data to ensure consistent ID field
+      const doctorsData = Array.isArray(doctorsRes)
+        ? doctorsRes
+        : (doctorsRes?.data || []);
         
-        setIsLoading({ patients: false, doctors: false, appointments: false });
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Failed to load data');
-        setIsLoading({ patients: false, doctors: false, appointments: false });
+      const formattedDoctors = doctorsData.map(doctor => ({
+        ...doctor,
+        _id: doctor._id || doctor.id,
+        id: doctor._id || doctor.id
+      }));
+      
+      // Process appointments - handle both direct array and nested data structure
+      let appointmentsData = [];
+      if (Array.isArray(apptRes)) {
+        appointmentsData = apptRes;
+      } else if (apptRes?.data && Array.isArray(apptRes.data)) {
+        appointmentsData = apptRes.data;
+      } else if (apptRes?.appointments && Array.isArray(apptRes.appointments)) {
+        appointmentsData = apptRes.appointments;
       }
-    };
 
-    fetchData();
+      // Process patients
+      const patientsData = (Array.isArray(patientsRes) ? patientsRes : (patientsRes?.data || [])).map(patient => {
+        const patientId = patient._id || patient.id;
+        
+        // Handle assignedDoctor from the server response
+        let assignedDoctor = null;
+        if (patient.assignedDoctor) {
+          // If assignedDoctor is already populated by the server
+          assignedDoctor = {
+            _id: patient.assignedDoctor._id || patient.assignedDoctor,
+            id: patient.assignedDoctor._id || patient.assignedDoctor,
+            name: patient.assignedDoctor.name || 'Unknown Doctor',
+            specialization: patient.assignedDoctor.specialization,
+            email: patient.assignedDoctor.email
+          };
+        } else {
+          // Fallback to finding from appointments if not provided by server
+          assignedDoctor = findDoctorForPatient(patientId, appointmentsData, formattedDoctors);
+        }
+        
+        return {
+          ...patient,
+          _id: patientId,
+          id: patientId,
+          assignedDoctor: assignedDoctor || null
+        };
+      });
+      
+      // Debug logs
+      console.log('Processed data:', {
+        patients: patientsData,
+        doctors: formattedDoctors,
+        appointments: appointmentsData
+      });
+      
+      setPatients(patientsData);
+      setDoctors(formattedDoctors);
+      setAppointments(appointmentsData);
+    } catch (err) {
+      toast.error('Error loading data');
+      console.error('Error in fetchData:', err);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  // Handle form changes
-  const handlePatientFormChange = (e) => {
-    const { name, value } = e.target;
-    setPatientForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleAppointmentFormChange = (e) => {
-    const { name, value } = e.target;
-    setAppointmentForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  // Handle date change for appointment
-  const handleDateChange = (date) => {
-    setAppointmentForm(prev => ({
-      ...prev,
-      date: date
-    }));
-  };
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Create new patient
-  const handleCreatePatient = async (e) => {
-    e.preventDefault();
+  const handleCreatePatient = async () => {
+    // Client-side validation
+    if (!patientForm.name?.trim() || !patientForm.phone?.trim()) {
+      toast.error('Name and phone number are required');
+      return;
+    }
+    
+    // Ensure a doctor is selected
+    if (!patientForm.assignedDoctor) {
+      toast.error('Please assign a doctor to this patient');
+      return;
+    }
+
     try {
-      const response = await patientAPI.createPatient(patientForm);
-      setPatients(prev => [...prev, response.data]);
-      setShowPatientModal(false);
-      toast.success('Patient created successfully');
+      setIsLoading(true);
       
-      // Reset form
+      // Get the selected doctor's ID if available
+      const doctorId = patientForm.assignedDoctor ? 
+        (patientForm.assignedDoctor._id || patientForm.assignedDoctor.id || patientForm.assignedDoctor) : 
+        null;
+      
+      // Prepare patient data with all fields
+      const patientData = {
+        name: patientForm.name.trim(),
+        phone: patientForm.phone.trim(),
+        email: patientForm.email?.trim() || '',
+        age: patientForm.age ? parseInt(patientForm.age) : 0,
+        gender: patientForm.gender || 'other',
+        dateOfBirth: patientForm.dateOfBirth || new Date().toISOString().split('T')[0],
+        bloodGroup: patientForm.bloodGroup,
+        doctorId: doctorId, // Send doctorId directly
+        address: {
+          street: patientForm.address.street?.trim() || '',
+          city: patientForm.address.city?.trim() || '',
+          state: patientForm.address.state?.trim() || '',
+          pincode: patientForm.address.pincode?.trim() || ''
+        },
+        medicalHistory: []
+      };
+      
+      console.log('Sending patient data:', patientData);
+      
+      const response = await receptionistAPI.createPatient(patientData);
+      console.log('Patient created:', response);
+      
+      // Format the assigned doctor data for the new patient
+      let assignedDoctorData = null;
+      if (response.data.assignedDoctor) {
+        // If backend returns populated doctor data
+        assignedDoctorData = {
+          _id: response.data.assignedDoctor._id || response.data.assignedDoctor,
+          id: response.data.assignedDoctor._id || response.data.assignedDoctor,
+          name: response.data.assignedDoctor.name || 'Unknown Doctor',
+          specialization: response.data.assignedDoctor.specialization,
+          email: response.data.assignedDoctor.email
+        };
+      } else if (patientForm.assignedDoctor) {
+        // Fallback to form data if backend doesn't return populated data
+        assignedDoctorData = {
+          _id: patientForm.assignedDoctor._id || patientForm.assignedDoctor.id || patientForm.assignedDoctor,
+          id: patientForm.assignedDoctor._id || patientForm.assignedDoctor.id || patientForm.assignedDoctor,
+          name: patientForm.assignedDoctor.name || 'Unknown Doctor',
+          specialization: patientForm.assignedDoctor.specialization,
+          email: patientForm.assignedDoctor.email
+        };
+      }
+      
+      // Create the new patient object with the assigned doctor
+      const newPatient = {
+        ...response.data,
+        _id: response.data._id || response.data.id,
+        id: response.data._id || response.data.id,
+        assignedDoctor: assignedDoctorData
+      };
+      
+      // Update the patients state with the new patient
+      setPatients(prevPatients => [{
+        ...response.data,
+        _id: response.data._id || response.data.id,
+        id: response.data._id || response.data.id,
+        assignedDoctor: assignedDoctorData
+      }, ...prevPatients]);
+      
+      // Reset the form
       setPatientForm({
         name: '',
-        email: '',
+        age: '',
+        gender: '',
         phone: '',
-        address: '',
-        dateOfBirth: '',
-        gender: 'male'
+        email: '',
+        bloodGroup: '',
+        address: {
+          street: '',
+          city: '',
+          state: '',
+          pincode: ''
+        },
+        assignedDoctor: null
       });
-    } catch (error) {
-      console.error('Error creating patient:', error);
-      toast.error(error.response?.data?.message || 'Failed to create patient');
+      
+      setShowPatientModal(false);
+      toast.success('Patient added successfully');
+    } catch (err) {
+      console.error('Error creating patient:', err);
+      toast.error('Failed to add patient. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Book appointment
-  const handleBookAppointment = async (e) => {
-    e.preventDefault();
+  // State for delete confirmation
+  const [deleteConfirmation, setDeleteConfirmation] = useState({
+    isOpen: false,
+    patientId: null,
+    patientName: ''
+  });
+
+  // Open delete confirmation
+  const confirmDelete = (patient) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      patientId: patient._id || patient.id,
+      patientName: patient.name
+    });
+  };
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmation.patientId) {
+      setDeleteConfirmation({ isOpen: false, patientId: null, patientName: '' });
+      return;
+    }
+
     try {
-      // Format date and time
-      const appointmentDate = new Date(appointmentForm.date);
-      const [hours, minutes] = appointmentForm.time.split(':');
-      appointmentDate.setHours(parseInt(hours), parseInt(minutes));
-      
-      const appointmentData = {
-        ...appointmentForm,
-        dateTime: appointmentDate.toISOString()
-      };
-
-      const response = await appointmentAPI.createAppointment(appointmentData);
-      setAppointments(prev => [...prev, response.data]);
-      setShowAppointmentModal(false);
-      toast.success('Appointment booked successfully');
-      
-      // Reset form
-      setAppointmentForm({
-        patientId: '',
-        doctorId: '',
-        date: new Date(),
-        time: '',
-        reason: '',
-        status: 'scheduled'
-      });
-    } catch (error) {
-      console.error('Error booking appointment:', error);
-      toast.error(error.response?.data?.message || 'Failed to book appointment');
+      setIsLoading(true);
+      await receptionistAPI.deletePatient(deleteConfirmation.patientId);
+      setPatients(patients.filter(p => p._id !== deleteConfirmation.patientId));
+      toast.success('Patient deleted successfully');
+    } catch (err) {
+      console.error('Error deleting patient:', err);
+      toast.error('Failed to delete patient');
+    } finally {
+      setIsLoading(false);
+      setDeleteConfirmation({ isOpen: false, patientId: null, patientName: '' });
     }
   };
 
-  // Format date for display
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const options = { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    };
-    return new Date(dateString).toLocaleString('en-US', options);
+  // Cancel delete
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation({ isOpen: false, patientId: null, patientName: '' });
   };
 
-  // Modal component
-  const Modal = ({ isOpen, onClose, title, children, onSave, saveText = 'Save' }) => {
-    if (!isOpen) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center p-4 border-b">
-            <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
-            <button 
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <span className="text-2xl">&times;</span>
-            </button>
-          </div>
-          <div className="p-6">
-            {children}
-          </div>
-          <div className="flex justify-end p-4 border-t bg-gray-50 rounded-b-lg">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 mr-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onSave}
-              className="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700"
-            >
-              {saveText}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  // Open booking modal for selected patient
+  const handleBookClick = (patient) => {
+    setSelectedPatient(patient);
+    // Reset the form with fresh data for the selected patient
+    setAppointmentForm({
+      doctorId: patient.assignedDoctor?._id || '',
+      date: new Date().toISOString().split('T')[0],
+      time: '',
+      reason: '',
+      patientId: patient._id
+    });
+    setShowBookModal(true);
   };
 
-  // Tab component
-  const Tab = ({ active, onClick, children }) => (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 font-medium text-sm ${active ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-    >
-      {children}
-    </button>
-  );
+  const handleEditClick = (patient) => {
+    setEditingPatient(patient);
+  };
+
+  const handleUpdateDoctor = async () => {
+    if (!editingPatient) return;
+    
+    try {
+      setIsLoading(true);
+      await api.put(`/patients/${editingPatient._id}`, {
+        doctorId: editingPatient.assignedDoctor?._id || null
+      });
+      
+      // Update the patients list with the new doctor assignment
+      setPatients(patients.map(p => 
+        p._id === editingPatient._id ? editingPatient : p
+      ));
+      
+      toast.success('Doctor assignment updated successfully');
+      setEditingPatient(null);
+    } catch (error) {
+      console.error('Error updating doctor assignment:', error);
+      toast.error(error.response?.data?.message || 'Failed to update doctor assignment');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle booking appointment
+  const handleBookAppointment = async () => {
+    if (!selectedPatient) {
+      toast.error('No patient selected');
+      return;
+    }
+    if (!selectedPatient.assignedDoctor) {
+      toast.error('Please assign a doctor to this patient first');
+      return;
+    }
+    if (!appointmentForm.time) {
+      toast.error('Please select a time for the appointment');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      // First, check for existing appointments for this patient on the same date
+      const existingAppointments = await receptionistAPI.getAppointments({
+        patientId: selectedPatient._id || selectedPatient.id,
+        date: appointmentForm.date
+      });
+      
+      // If there are existing appointments for this patient on the same date
+      if (existingAppointments.data && existingAppointments.data.length > 0) {
+        const existingAppointment = existingAppointments.data[0];
+        const appointmentDate = new Date(existingAppointment.date).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        
+        toast.error(`This patient already has an appointment on ${appointmentDate}`);
+        return;
+      }
+
+      // If no existing appointment, proceed with creating a new one
+      const appointmentData = {
+        patientId: selectedPatient._id || selectedPatient.id,
+        doctorId: selectedPatient.assignedDoctor._id || selectedPatient.assignedDoctor.id || selectedPatient.assignedDoctor,
+        date: appointmentForm.date,
+        time: appointmentForm.time,
+        reason: appointmentForm.reason || 'General Checkup',
+        status: 'scheduled'
+      };
+      
+      console.log('Sending appointment data:', appointmentData);
+      
+      const response = await receptionistAPI.createAppointment(appointmentData);
+      console.log('Appointment created:', response);
+      
+      toast.success('Appointment booked successfully!');
+      setShowBookModal(false);
+      fetchData();
+    } catch (err) {
+      console.error('Error booking appointment:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to book appointment';
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation Bar */}
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-gray-800">CuraMind Reception</h1>
-            </div>
-            <div className="flex items-center">
-              <div className="ml-4 flex items-center md:ml-6">
-                <div className="ml-3 relative dropdown-area">
-                  <div>
-                    <button 
-                      type="button" 
-                      className="max-w-xs bg-white flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                      onClick={() => setShowDropdown(!showDropdown)}
-                    >
-                      <span className="sr-only">Open user menu</span>
-                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                        <FaUserCircle className="h-6 w-6" />
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-gray-700">
-                        {receptionistInfo.name || 'Receptionist'}
-                      </span>
-                    </button>
-                  </div>
-                  {showDropdown && (
-                    <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
-                      <div className="px-4 py-2 text-xs text-gray-500 border-b">
-                        <p className="font-medium">{receptionistInfo.email || 'receptionist@curamind.com'}</p>
-                      </div>
-                      <button
-                        onClick={navigateToHome}
-                        className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        <FaHome className="inline mr-2" /> Home
-                      </button>
-                      <button
-                        onClick={navigateToProfile}
-                        className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        <FaUserCircle className="inline mr-2" /> My Profile
-                      </button>
-                      <div className="border-t border-gray-100"></div>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                      >
-                        <FaSignOutAlt className="inline mr-2" /> Sign out
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gray-100">
+      {/* Topbar */}
+      <nav className="bg-white shadow-sm p-4 flex justify-between items-center">
+        <div className="flex items-center gap-2 text-blue-600 font-semibold text-lg">
+          <FaUserMd /> Receptionist Dashboard
         </div>
+        <button
+          onClick={() => {
+            localStorage.clear();
+            navigate('/login');
+          }}
+          className="flex items-center text-red-600 hover:text-red-800"
+        >
+          <FaSignOutAlt className="mr-1" /> Logout
+        </button>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">Receptionist Dashboard</h2>
-      
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <div className="flex space-x-2">
-          <Tab 
-            active={activeTab === 'patients'} 
-            onClick={() => setActiveTab('patients')}
-          >
+      <div className="max-w-6xl mx-auto mt-6">
+        <div className="border-b flex gap-2">
+          <Tab active={activeTab === 'patients'} onClick={() => setActiveTab('patients')}>
             Patients
           </Tab>
-          <Tab 
-            active={activeTab === 'appointments'} 
-            onClick={() => setActiveTab('appointments')}
-          >
+          <Tab active={activeTab === 'appointments'} onClick={() => setActiveTab('appointments')}>
             Appointments
           </Tab>
         </div>
-      </div>
 
-      {/* Patients Tab */}
-      {activeTab === 'patients' && (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-          <div className="p-4 border-b flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-gray-800">Patients List</h3>
-            <button
-              onClick={() => setShowPatientModal(true)}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <FaUserPlus className="mr-2" />
-              Add New Patient
-            </button>
-          </div>
-          
-          <div className="overflow-x-auto">
-            {isLoading.patients ? (
-              <div className="flex justify-center items-center p-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
-            ) : (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+        {/* Patients */}
+        {activeTab === 'patients' && (
+          <div className="bg-white mt-4 rounded-lg shadow">
+            <div className="p-4 flex justify-between">
+              <h3 className="text-lg font-semibold">Patients List</h3>
+              <button
+                onClick={() => setShowPatientModal(true)}
+                className="flex items-center bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                <FaUserPlus className="mr-2" /> Add New
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-t">
+                <thead className="bg-gray-50 text-left">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date of Birth</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="p-3">Name</th>
+                    <th className="p-3">Phone</th>
+                    <th className="p-3">Age</th>
+                    <th className="p-3">Assigned Doctor</th>
+                    <th className="p-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {patients.map(patient => (
-                    <tr key={patient._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <FaUserInjured className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{patient.name}</div>
-                            <div className="text-sm text-gray-500">{patient.gender}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="flex items-center">
-                          <FaEnvelope className="mr-2 text-gray-400" />
-                          {patient.email}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="flex items-center">
-                          <FaPhone className="mr-2 text-gray-400" />
-                          {patient.phone}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="flex items-center">
-                          <FaBirthdayCake className="mr-2 text-gray-400" />
-                          {new Date(patient.dateOfBirth).toLocaleDateString()}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => {
-                            setSelectedPatient(patient);
-                            setShowAppointmentModal(true);
-                            setAppointmentForm(prev => ({
-                              ...prev,
-                              patientId: patient._id
-                            }));
-                          }}
-                          className="text-blue-600 hover:text-blue-900 mr-4"
-                        >
-                          <FaCalendarPlus className="inline mr-1" /> Book
-                        </button>
+                <tbody>
+                  {patients.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="p-4 text-center text-gray-500">
+                        No patients found. Add a new patient to get started.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    patients.map((p) => {
+                      // The assignedDoctor is already populated in fetchData
+                      const assignedDoctor = p.assignedDoctor;
+                        
+                      return (
+                        <tr key={p._id} className="border-t hover:bg-gray-50">
+                          <td className="p-3 font-medium">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-2">
+                                {p.name ? p.name.charAt(0).toUpperCase() : 'P'}
+                              </div>
+                              <div>
+                                <div>{p.name || '—'}</div>
+                                <div className="text-xs text-gray-500">{p.email || '—'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <a href={`tel:${p.phone}`} className="text-blue-600 hover:underline">
+                              {p.phone || '—'}
+                            </a>
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-1 bg-gray-100 rounded-full text-sm">
+                              {p.age ? `${p.age} yrs` : '—'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {assignedDoctor ? (
+                              <div className="flex items-center">
+                                <div className="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-xs mr-2">
+                                  {assignedDoctor.name ? assignedDoctor.name.charAt(0).toUpperCase() : 'D'}
+                                </div>
+                                <span>Dr. {assignedDoctor.name || 'Unknown'}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center">
+                                <div className="h-6 w-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs mr-2">
+                                  <FaUserMd className="text-xs" />
+                                </div>
+                                <span className="text-gray-400">Not assigned</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex justify-end space-x-2">
+                              <button
+                                onClick={() => handleBookClick(p)}
+                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center"
+                                title="Book Appointment"
+                              >
+                                <FaCalendarPlus className="mr-1" /> Book
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditClick(p);
+                                }}
+                                className="p-1 text-blue-500 hover:text-blue-700"
+                                title="Edit Doctor"
+                              >
+                                <FaEdit />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  confirmDelete(p);
+                                }}
+                                className="p-1 text-red-500 hover:text-red-700"
+                                title="Delete"
+                                disabled={isLoading}
+                              >
+                                <FaTrash />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
-            )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Appointments Tab */}
-      {activeTab === 'appointments' && (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="p-4 border-b flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-gray-800">Appointments</h3>
-            <button
-              onClick={() => setShowAppointmentModal(true)}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <FaCalendarPlus className="mr-2" />
-              New Appointment
-            </button>
-          </div>
-          
-          <div className="overflow-x-auto">
-            {isLoading.appointments ? (
-              <div className="flex justify-center items-center p-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
-            ) : (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+        {/* Appointments */}
+        {activeTab === 'appointments' && (
+          <div className="bg-white mt-4 rounded-lg shadow">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-semibold">Appointments</h3>
+              <button
+                onClick={fetchData}
+                className="flex items-center text-sm bg-blue-50 text-blue-600 px-3 py-1 rounded hover:bg-blue-100"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  'Loading...'
+                ) : (
+                  <>
+                    <FaSyncAlt className="mr-1" /> Refresh
+                  </>
+                )}
+              </button>
+            </div>
+            <table className="w-full text-sm border-t">
+              <thead className="bg-gray-50 text-left">
+                <tr>
+                  <th className="p-3">Patient</th>
+                  <th className="p-3">Doctor</th>
+                  <th className="p-3">Date & Time</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {appointments.length === 0 ? (
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Doctor</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                    <td colSpan="5" className="p-4 text-center text-gray-500">
+                      No appointments found.
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {appointments.map(appointment => {
-                    const patient = patients.find(p => p._id === appointment.patientId) || {};
-                    const doctor = doctors.find(d => d._id === appointment.doctorId) || {};
+                ) : (
+                  appointments.map((appointment) => {
+                    // Debug log to check appointment data
+                    console.log('Appointment data:', appointment);
+                    
+                    // Use populated data from the API with proper fallbacks
+                    const patient = typeof appointment.patient === 'object' ? appointment.patient : {};
+                    const doctor = typeof appointment.doctor === 'object' ? appointment.doctor : {};
+                    
+                    // Format date and time
+                    const appointmentDate = appointment.date ? new Date(appointment.date) : null;
+                    const formattedDate = appointmentDate ? appointmentDate.toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    }) : '—';
+                    
+                    // Format time if available
+                    const formattedTime = appointment.time || (appointmentDate ? appointmentDate.toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }) : '—');
                     
                     return (
-                      <tr key={appointment._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{patient.name || 'N/A'}</div>
-                          <div className="text-sm text-gray-500">{patient.phone || ''}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                      <tr key={appointment._id} className="border-t hover:bg-gray-50">
+                        <td className="p-3">
                           <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                              <FaUserMd className="h-5 w-5 text-green-600" />
+                            <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-2">
+                              {patient && patient.name ? patient.name.charAt(0).toUpperCase() : 'P'}
                             </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">Dr. {doctor.name || 'N/A'}</div>
-                              <div className="text-sm text-gray-500">{doctor.specialization || ''}</div>
+                            <div>
+                              <div>{patient && patient.name ? patient.name : '—'}</div>
+                              <div className="text-xs text-gray-500">
+                                {patient && patient.phone ? patient.phone : '—'}
+                              </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{formatDate(appointment.dateTime)}</div>
+                        <td className="p-3">
+                          {doctor && (doctor._id || doctor.id) ? (
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-xs mr-2">
+                                {doctor.name ? doctor.name.charAt(0).toUpperCase() : 'D'}
+                              </div>
+                              <div>
+                                <div>Dr. {doctor.name || '—'}</div>
+                                <div className="text-xs text-gray-500">
+                                  {doctor.specialization || '—'}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {appointment.status}
-                          </span>
+                        <td className="p-3 whitespace-nowrap">
+                          <div className="font-medium">
+                            {formattedDate}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {formattedTime}
+                          </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          <div className="max-w-xs truncate">{appointment.reason}</div>
+                        <td className="p-3">
+                          {appointment.status ? 
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                              appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                              'bg-blue-100 text-blue-800'
+                            }`}>
+                              {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                            </span> : '—'
+                          }
+                        </td>
+                        <td className="p-3">
+                          <div className="text-gray-700">
+                            {appointment.reason || appointment.purpose || appointment.notes || '—'}
+                          </div>
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            )}
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Add Patient Modal */}
       <Modal
@@ -505,180 +741,303 @@ const ReceptionistDashboard = () => {
         onClose={() => setShowPatientModal(false)}
         title="Add New Patient"
         onSave={handleCreatePatient}
+        saveText="Add"
+        disabled={isLoading}
       >
-        <form onSubmit={handleCreatePatient}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-              <input
-                type="text"
-                name="name"
-                value={patientForm.name}
-                onChange={handlePatientFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={patientForm.email}
-                onChange={handlePatientFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-              <input
-                type="tel"
-                name="phone"
-                value={patientForm.phone}
-                onChange={handlePatientFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
-              <input
-                type="date"
-                name="dateOfBirth"
-                value={patientForm.dateOfBirth}
-                onChange={handlePatientFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-              <select
-                name="gender"
-                value={patientForm.gender}
-                onChange={handlePatientFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-              <textarea
-                name="address"
-                rows="3"
-                value={patientForm.address}
-                onChange={handlePatientFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              ></textarea>
-            </div>
+        <div className="space-y-3">
+        {/* Doctor Selection */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Assign Doctor <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={patientForm.assignedDoctor || ''}
+            onChange={(e) => setPatientForm({ 
+              ...patientForm, 
+              assignedDoctor: e.target.value || null 
+            })}
+            className="w-full border p-2 rounded"
+            required
+          >
+            <option value="">Select a doctor</option>
+            {doctors.map((doctor) => (
+              <option key={doctor._id || doctor.id} value={doctor._id || doctor.id}>
+                Dr. {doctor.name} ({doctor.specialization || 'General'})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Basic Information */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <input 
+              name="name" 
+              placeholder="Full Name" 
+              className="w-full border p-2 rounded"
+              value={patientForm.name}
+              onChange={(e) => setPatientForm({ ...patientForm, name: e.target.value })} 
+              required
+            />
           </div>
-        </form>
+          <div>
+            <input 
+              type="number" 
+              name="age" 
+              placeholder="Age" 
+              min="0"
+              className="w-full border p-2 rounded"
+              value={patientForm.age}
+              onChange={(e) => setPatientForm({ ...patientForm, age: e.target.value })} 
+              required
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <select 
+              name="gender" 
+              className="w-full border p-2 rounded"
+              value={patientForm.gender}
+              onChange={(e) => setPatientForm({ ...patientForm, gender: e.target.value })}
+              required
+            >
+              <option value="">Select Gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div>
+            <input 
+              type="tel" 
+              name="phone" 
+              placeholder="Phone Number" 
+              className="w-full border p-2 rounded"
+              value={patientForm.phone}
+              onChange={(e) => setPatientForm({ ...patientForm, phone: e.target.value })}
+              required
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <input 
+              type="email" 
+              name="email" 
+              placeholder="Email Address" 
+              className="w-full border p-2 rounded"
+              value={patientForm.email}
+              onChange={(e) => setPatientForm({ ...patientForm, email: e.target.value })}
+              required
+            />
+          </div>
+          <div>
+            <select 
+              name="bloodGroup" 
+              className="w-full border p-2 rounded"
+              value={patientForm.bloodGroup || ''}
+              onChange={(e) => setPatientForm({ ...patientForm, bloodGroup: e.target.value })}
+            >
+              <option value="">Select Blood Group</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Address Section */}
+        <div className="border-t pt-3 mt-4">
+          <h4 className="font-medium mb-2">Address</h4>
+          <input 
+            type="text" 
+            name="street" 
+            placeholder="Street Address" 
+            className="w-full border p-2 rounded mb-2"
+            value={patientForm.address.street}
+            onChange={(e) => setPatientForm({ 
+              ...patientForm, 
+              address: { ...patientForm.address, street: e.target.value } 
+            })}
+            required
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <input 
+              type="text" 
+              name="city" 
+              placeholder="City" 
+              className="w-full border p-2 rounded"
+              value={patientForm.address.city}
+              onChange={(e) => setPatientForm({ 
+                ...patientForm, 
+                address: { ...patientForm.address, city: e.target.value } 
+              })}
+              required
+            />
+            <input 
+              type="text" 
+              name="state" 
+              placeholder="State" 
+              className="w-full border p-2 rounded"
+              value={patientForm.address.state}
+              onChange={(e) => setPatientForm({ 
+                ...patientForm, 
+                address: { ...patientForm.address, state: e.target.value } 
+              })}
+              required
+            />
+          </div>
+          <input 
+            type="text" 
+            name="pincode" 
+            placeholder="Pincode" 
+            className="w-full border p-2 rounded mt-2"
+            value={patientForm.address.pincode}
+            onChange={(e) => setPatientForm({ 
+              ...patientForm, 
+              address: { ...patientForm.address, pincode: e.target.value } 
+            })}
+            required
+          />
+        </div>
+      </div>
       </Modal>
 
       {/* Book Appointment Modal */}
       <Modal
-        isOpen={showAppointmentModal}
-        onClose={() => setShowAppointmentModal(false)}
-        title={selectedPatient ? `Book Appointment for ${selectedPatient.name}` : 'Book New Appointment'}
+        isOpen={showBookModal}
+        onClose={() => setShowBookModal(false)}
+        title={`Book Appointment for ${selectedPatient?.name || ''}`}
         onSave={handleBookAppointment}
-        saveText="Book Appointment"
+        saveText="Book"
+        disabled={isLoading || !selectedPatient?.assignedDoctor}
       >
-        <form onSubmit={handleBookAppointment}>
-          <div className="space-y-4">
-            {!selectedPatient && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Select Patient</label>
-                <select
-                  name="patientId"
-                  value={appointmentForm.patientId}
-                  onChange={handleAppointmentFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select a patient</option>
-                  {patients.map(patient => (
-                    <option key={patient._id} value={patient._id}>
-                      {patient.name} ({patient.email})
-                    </option>
-                  ))}
-                </select>
+        <div className="space-y-3">
+          {selectedPatient?.assignedDoctor ? (
+            <div className="mb-4 p-3 bg-blue-50 rounded-md">
+              <p className="text-sm text-gray-600 mb-1">Assigned Doctor:</p>
+              <div className="flex items-center">
+                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-sm font-medium mr-2">
+                  {selectedPatient.assignedDoctor.name?.charAt(0) || 'D'}
+                </div>
+                <div>
+                  <p className="font-medium">Dr. {selectedPatient.assignedDoctor.name || 'Unknown Doctor'}</p>
+                  <p className="text-xs text-gray-500">
+                    {selectedPatient.assignedDoctor.specialization || 'General'}
+                  </p>
+                </div>
               </div>
-            )}
+            </div>
+          ) : (
+            <div className="mb-4 p-3 bg-yellow-50 rounded-md text-yellow-700">
+              <p>Please assign a doctor to this patient before booking an appointment.</p>
+            </div>
+          )}
+          
+          {/* Date and Time Selection */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <input
+                type="date"
+                className="w-full border p-2 rounded"
+                value={appointmentForm.date}
+                onChange={(e) => setAppointmentForm({...appointmentForm, date: e.target.value})}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+              <input
+                type="time"
+                className="w-full border p-2 rounded"
+                value={appointmentForm.time}
+                onChange={(e) => setAppointmentForm({...appointmentForm, time: e.target.value})}
+                required
+              />
+            </div>
+          </div>
+          
+          {/* Reason for Visit */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Visit</label>
+            <textarea
+              rows="3"
+              className="w-full border p-2 rounded"
+              placeholder="e.g., General Checkup"
+              value={appointmentForm.reason}
+              onChange={(e) => setAppointmentForm({...appointmentForm, reason: e.target.value})}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Doctor Assignment Modal */}
+      <Modal
+        isOpen={!!editingPatient}
+        onClose={() => setEditingPatient(null)}
+        title="Update Assigned Doctor"
+        onSave={handleUpdateDoctor}
+        saveText="Update Doctor"
+        disabled={isLoading || !editingPatient?.assignedDoctor?._id}
+      >
+        {editingPatient && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-medium">Patient: {editingPatient.name}</h3>
+              <p className="text-sm text-gray-600">Current Doctor: {editingPatient.assignedDoctor?.name || 'Not assigned'}</p>
+            </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select Doctor</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Assign New Doctor
+              </label>
               <select
-                name="doctorId"
-                value={appointmentForm.doctorId}
-                onChange={handleAppointmentFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                required
+                className="w-full p-2 border rounded"
+                value={editingPatient.assignedDoctor?._id || ''}
+                onChange={(e) => {
+                  const doctorId = e.target.value;
+                  const selectedDoctor = doctors.find(d => d._id === doctorId);
+                  setEditingPatient({
+                    ...editingPatient,
+                    assignedDoctor: selectedDoctor
+                  });
+                }}
               >
                 <option value="">Select a doctor</option>
                 {doctors.map(doctor => (
                   <option key={doctor._id} value={doctor._id}>
-                    Dr. {doctor.name} ({doctor.specialization})
+                    Dr. {doctor.name} ({doctor.specialization || 'General'})
                   </option>
                 ))}
               </select>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                <DatePicker
-                  selected={appointmentForm.date}
-                  onChange={handleDateChange}
-                  minDate={new Date()}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-                <select
-                  name="time"
-                  value={appointmentForm.time}
-                  onChange={handleAppointmentFormChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select a time</option>
-                  {timeSlots.map((time, index) => (
-                    <option key={index} value={time}>
-                      {time}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Visit</label>
-              <textarea
-                name="reason"
-                rows="3"
-                value={appointmentForm.reason}
-                onChange={handleAppointmentFormChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Please describe the reason for the appointment..."
-                required
-              ></textarea>
-            </div>
           </div>
-        </form>
+        )}
       </Modal>
-      </div>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteConfirmation.isOpen}
+        onClose={handleDeleteCancel}
+        title="Confirm Delete"
+        onSave={handleDeleteConfirm}
+        saveText="Delete"
+        disabled={isLoading}
+      >
+        <div className="text-gray-700">
+          <p>Are you sure you want to delete patient <strong>{deleteConfirmation.patientName}</strong>?</p>
+          <p className="mt-2 text-red-600">This action cannot be undone.</p>
+        </div>
+      </Modal>
     </div>
   );
 };
