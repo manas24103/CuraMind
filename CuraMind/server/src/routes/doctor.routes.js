@@ -1,18 +1,31 @@
 import { Router } from 'express';
 import { 
-  getDashboardStats, 
+  getAllDoctors,
+  getDoctorById,
+  createDoctor,
+  updateDoctor,
+  deleteDoctor,
+  getDoctorAppointments,
+  getDoctorPatients
 } from '../controllers/doctor.controller.js';
-import { login } from '../controllers/auth.controller.js';
-import { authenticateDoctor } from '../middleware/authDoctor.js';
+import { authenticate, authorizeRoles } from '../middleware/auth.js';
 
 const router = Router();
 
 // Public routes
-router.post('/login', login);
+router.get('/', getAllDoctors);
+router.get('/:id', getDoctorById);
 
 // Protected routes (require authentication)
-router.use(authenticateDoctor);
-// Doctor dashboard
-router.get('/:doctorId/stats', getDashboardStats);
+router.use(authenticate);
+
+// Doctor-specific routes
+router.get('/:id/appointments', authorizeRoles('doctor'), getDoctorAppointments);
+router.get('/:id/patients', authorizeRoles('doctor'), getDoctorPatients);
+
+// Admin-only routes
+router.post('/', authorizeRoles('admin'), createDoctor);
+router.put('/:id', authorizeRoles('admin'), updateDoctor);
+router.delete('/:id', authorizeRoles('admin'), deleteDoctor);
 
 export default router;

@@ -1,31 +1,30 @@
 import { Router } from 'express';
-import { 
-  createAppointment, 
-  getAppointment, 
-  getDoctorAppointments, 
+import {
+  getAllAppointments,
+  getAppointment,
+  createAppointment,
   updateAppointment,
-  deleteAppointment 
+  deleteAppointment
 } from '../controllers/appointment.controller.js';
-import { authenticateDoctor } from '../middleware/authDoctor.js';
+import { authenticate, authorizeRoles } from '../middleware/auth.js';
 
 const router = Router();
 
-// All routes require doctor authentication
-router.use(authenticateDoctor);
+// Protected routes (require authentication)
+router.use(authenticate);
+// Get all appointments (with optional query params for filtering)
+router.get('/', authorizeRoles('doctor', 'receptionist', 'admin'), getAllAppointments);
 
-// Create new appointment
-router.post('/', createAppointment);
+// Get single appointment
+router.get('/:id', authorizeRoles('doctor', 'receptionist', 'admin'), getAppointment);
 
-// Get all appointments for the authenticated doctor
-router.get('/', getDoctorAppointments);
+// Create new appointment (receptionist and admin only)
+router.post('/', authorizeRoles('doctor', 'receptionist', 'admin'), createAppointment);
 
-// Get specific appointment by ID
-router.get('/:id', getAppointment);
+// Update appointment (receptionist and admin only)
+router.put('/:id',authorizeRoles('doctor', 'receptionist', 'admin'), updateAppointment);
 
-// Update appointment by ID
-router.put('/:id', updateAppointment);
-
-// Delete appointment by ID
-router.delete('/:id', deleteAppointment);
+// Delete appointment (admin only)
+router.delete('/:id', authorizeRoles('admin'), deleteAppointment);
 
 export default router;

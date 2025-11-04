@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import api, { adminAPI, patientAPI } from "../../services/api";
+import { patientAPI, doctorAPI, receptionistAPI } from "../../services/api";
 import { toast } from "react-toastify";
 import {
   FaUserMd,
@@ -68,7 +68,6 @@ const AdminDashboard = () => {
     return () => document.removeEventListener("mousedown", closeDropdown);
   }, []);
 
-  // Fetch dashboard data
   // Update stats whenever receptionists, patients, or doctors arrays change
   useEffect(() => {
     setStats(prev => ({
@@ -79,64 +78,50 @@ const AdminDashboard = () => {
     }));
   }, [receptionists, patients, doctors]);
 
-  const fetchDashboardData = async () => {
-    try {
-      setIsLoading({ stats: true, doctors: true, patients: true, receptionists: true });
-      const token = localStorage.getItem("token");
-      if (!token) return (window.location.href = "/login");
-
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-      const [patientsRes, doctorsRes, receptionistsRes] = await Promise.all([
-        patientAPI.getPatients().catch(() => ({ data: { data: [] } })),
-        adminAPI.getDoctors().catch(() => ({ data: { data: [] } })),
-        adminAPI.getReceptionists ? adminAPI.getReceptionists().catch(() => ({ data: { data: [] } })) : { data: { data: [] } }
-      ]);
-      
-      setPatients(patientsRes?.data?.data || []);
-      setDoctors(doctorsRes?.data?.data || []);
-      setReceptionists(receptionistsRes?.data?.data || []);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setIsLoading({ stats: false, doctors: false, patients: false, receptionists: false });
-    }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  // ---------------- Fetch Data ----------------
+  // Fetch dashboard data on component mount
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const token = localStorage.getItem("token");
-        if (!token) return (window.location.href = "/login");
-
-        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-        const [patientsRes, doctorsRes] = await Promise.all([
-          patientAPI.getPatients(),
-          adminAPI.getDoctors(),
+        // Set all loading states to true
+        setIsLoading({ stats: true, doctors: true, patients: true, receptionists: true });
+        
+        // Fetch all data in parallel
+        const [patientsRes, doctorsRes, receptionistsRes] = await Promise.all([
+          patientAPI.getPatients().catch(error => {
+            console.error('Error fetching patients:', error);
+            return { data: { data: [] } }; // Return empty array on error with expected structure
+          }),
+          doctorAPI.getDoctors().catch(error => {
+            console.error('Error fetching doctors:', error);
+            return { data: { data: [] } }; // Return empty array on error with expected structure
+          }),
+          receptionistAPI.getReceptionists().catch(error => {
+            console.error('Error fetching receptionists:', error);
+            return { data: { data: [] } }; // Return empty array on error with expected structure
+          })
         ]);
-
-        setStats({
-          patients: patientsRes?.data?.data?.length || 0,
-          doctors: doctorsRes?.data?.data?.length || 0,
-          receptionists: 5, // placeholder if not fetched
-        });
-
+        
+        // Update state with the response data
+        setPatients(patientsRes?.data?.data || []);
         setDoctors(doctorsRes?.data?.data || []);
-      } catch {
-        toast.error("Failed to load dashboard data");
+        setReceptionists(receptionistsRes?.data?.data || []);
+        
+      } catch (error) {
+        console.error('Error in fetchDashboardData:', error);
+        toast.error(error.response?.data?.message || 'Failed to load dashboard data');
       } finally {
-        setIsLoading({ stats: false, doctors: false, patients: false });
+        setIsLoading({ stats: false, doctors: false, patients: false, receptionists: false });
       }
     };
+    
+    // Call the function to fetch data
     fetchDashboardData();
-  }, []);
+    
+    // Cleanup function (optional)
+    return () => {
+      // Any cleanup code if needed
+    };
+  }, []); // Empty dependency array means this runs once on mount
 
   // ---------------- State for Receptionist Form ----------------
   const [receptionistForm, setReceptionistForm] = useState({
@@ -163,16 +148,16 @@ const AdminDashboard = () => {
     try {
       if (isEditingReceptionist && currentReceptionistId) {
         // Update existing receptionist
-        await adminAPI.updateReceptionist(currentReceptionistId, receptionistForm);
+        await receptionistAPI.updateReceptionist(currentReceptionistId, receptionistForm);
         // Refresh the receptionists list
-        const receptionistsResponse = await adminAPI.getReceptionists();
+        const receptionistsResponse = await receptionistAPI.getReceptionists();
         setReceptionists(receptionistsResponse.data?.data || []);
         toast.success("Receptionist updated successfully");
       } else {
         // Create new receptionist
-        await adminAPI.createReceptionist(receptionistForm);
+        await receptionistAPI.createReceptionist(receptionistForm);
         // Refresh the receptionists list
-        const receptionistsResponse = await adminAPI.getReceptionists();
+        const receptionistsResponse = await receptionistAPI.getReceptionists();
         setReceptionists(receptionistsResponse.data?.data || []);
         toast.success("Receptionist created successfully");
       }
@@ -245,10 +230,10 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const doctorData = { ...doctorForm, experience: Number(doctorForm.experience) };
-      const response = await adminAPI.createDoctor(doctorData);
+      const response = await doctorAPI.createDoctor(doctorData);
       
       // After successful creation, refresh the doctors list
-      const doctorsResponse = await adminAPI.getDoctors();
+      const doctorsResponse = await doctorAPI.getDoctors();
       setDoctors(doctorsResponse.data?.data || []);
       
       // Reset form and close modal
@@ -270,17 +255,14 @@ const AdminDashboard = () => {
   };
 
   const handleDeleteDoctor = async (id) => {
-    console.log('Attempting to delete doctor with ID:', id);
     if (!id) {
-      console.error('No doctor ID provided for deletion');
       toast.error('Error: Could not find doctor ID. Please try again.');
       return;
     }
     
     if (window.confirm("Are you sure you want to delete this doctor?")) {
       try {
-        console.log('Deleting doctor with ID:', id);
-        await adminAPI.deleteDoctor(id);
+        await doctorAPI.deleteDoctor(id);
         setDoctors(prev => prev.filter(d => {
           // Handle both _id and id properties
           const doctorId = d?._id || d?.id;
@@ -288,7 +270,6 @@ const AdminDashboard = () => {
         }));
         toast.success("Doctor deleted successfully");
       } catch (error) {
-        console.error('Error deleting doctor:', error);
         toast.error(error.response?.data?.message || "Failed to delete doctor");
       }
     }
@@ -296,19 +277,16 @@ const AdminDashboard = () => {
 
   const handleDeleteReceptionist = async (id) => {
     if (!id) {
-      console.error('No receptionist ID provided for deletion');
       toast.error('Error: No receptionist ID provided');
       return;
     }
     
     if (window.confirm("Are you sure you want to delete this receptionist?")) {
       try {
-        console.log('Deleting receptionist with ID:', id);
-        await adminAPI.deleteReceptionist(id);
+        await receptionistAPI.deleteReceptionist(id);
         setReceptionists(prev => prev.filter(r => r._id !== id));
         toast.success("Receptionist deleted successfully");
       } catch (error) {
-        console.error('Error deleting receptionist:', error);
         toast.error(error.response?.data?.message || "Failed to delete receptionist");
       }
     }

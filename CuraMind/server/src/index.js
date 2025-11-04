@@ -13,8 +13,6 @@ import authRoutes from './routes/auth.routes.js';
 import doctorRoutes from './routes/doctor.routes.js';
 import patientRoutes from './routes/patient.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
-import testRoutes from './routes/test.routes.js';
-import adminRoutes from './routes/admin.routes.js';
 import receptionistRoutes from './routes/receptionist.routes.js';
 import errorHandler from './middleware/error.middleware.js';
 import connectDB from './config/db.js';
@@ -40,9 +38,21 @@ if (!process.env.NODE_ENV) {
 
 // CORS configuration
 const corsOptions = {
-  origin: ['http://localhost:3000', 'http://localhost:5173'],
+  origin: [
+    'http://localhost:3000', 
+    'http://localhost:5173',
+    'http://localhost:3001',
+    'https://your-production-domain.com' // Replace with your production domain
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'x-auth-token',
+    'token'
+  ],
+  exposedHeaders: ['x-auth-token'],
   credentials: true,
   optionsSuccessStatus: 204,
   maxAge: 86400 // 24 hours
@@ -50,7 +60,12 @@ const corsOptions = {
 
 // Log all incoming requests
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  const timestamp = new Date().toISOString();
+  const method = req.method.padEnd(7);
+  const url = req.originalUrl;
+  const ip = req.ip || req.connection.remoteAddress;
+  
+  console.log(`[${timestamp}] ${method} ${url} from ${ip}`);
   console.log('Headers:', req.headers);
   console.log('Body:', req.body);
   next();
@@ -215,15 +230,17 @@ const printRoutes = (routes, parentPath = '') => {
   });
 };
 
-// Routes
-console.log('\n=== Registered Routes ===');
+// API Routes
+console.log('\n=== Registered API Routes ===');
+
+// Public routes
 app.use('/api/auth', authRoutes);
+
+// Protected API routes
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/appointments', appointmentRoutes);
-app.use('/api/test', testRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/receptionist', receptionistRoutes);
+app.use('/api/receptionists', receptionistRoutes);
 
 // Print all routes after they're registered in development
 if (process.env.NODE_ENV === 'development') {

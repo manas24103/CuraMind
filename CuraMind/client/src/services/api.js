@@ -12,7 +12,8 @@ const api = axios.create({
 // Add a request interceptor to add the auth token to requests
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    // Check for both doctorToken and token for backward compatibility
+    const token = localStorage.getItem('doctorToken') || localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -90,164 +91,77 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  login: (credentials) => api.post('/auth/login', credentials)
-};
-
-// Admin API
-export const adminAPI = {
-  // Doctors
-  createDoctor: (data) => api.post('/admin/doctors', data),
-  getDoctors: () => api.get('/admin/doctors'),
-  deleteDoctor: (id) => api.delete(`/admin/doctors/${id}`),
-  
-  // Receptionists
-  createReceptionist: (data) => api.post('/admin/receptionists', data),
-  getReceptionists: () => api.get('/admin/receptionists'),
-  deleteReceptionist: (id) => api.delete(`/admin/receptionists/${id}`)
+  login: (credentials) => api.post('/auth/login', credentials),
+  // Add other auth endpoints as needed
 };
 
 // Doctor API
 export const doctorAPI = {
+  // Admin only
+  createDoctor: (data) => api.post('/doctors', data),
   getDoctors: () => api.get('/doctors'),
   getDoctor: (id) => api.get(`/doctors/${id}`),
-  getDashboardStats: (doctorId) => api.get(`/doctors/${doctorId}/stats`),
-  getProfile: () => api.get('/doctors/me'),
-  updateProfile: (data) => api.put('/doctors/me', data),
+  updateDoctor: (id, data) => api.put(`/doctors/${id}`, data),
+  deleteDoctor: (id) => api.delete(`/doctors/${id}`),
+  
+  // Doctor-specific
   getDoctorAppointments: (doctorId) => api.get(`/doctors/${doctorId}/appointments`),
-  getDoctorPatients: (doctorId) => api.get(`/doctors/${doctorId}/patients`)
-};
-
-// Appointment API
-export const appointmentAPI = {
-  getAppointments: () => api.get('/appointments'),
-  createAppointment: (data) => api.post('/appointments', data),
-  getAppointment: (id) => api.get(`/appointments/${id}`),
-  updateAppointment: (id, data) => api.put(`/appointments/${id}`, data),
-  deleteAppointment: (id) => api.delete(`/appointments/${id}`),
-  getDoctorAppointments: (doctorId) => api.get(`/appointments/doctor/${doctorId}`),
-  getPatientAppointments: (patientId) => api.get(`/appointments/patient/${patientId}`),
-  getUpcomingAppointments: () => api.get('/appointments/upcoming'),
-  getAppointmentsByDate: (date) => api.get(`/appointments/date/${date}`)
+  getDoctorPatients: (doctorId) => api.get(`/doctors/${doctorId}/patients`),
+  getDashboardStats: (doctorId) => api.get(`/doctors/${doctorId}/stats`),
 };
 
 // Patient API
 export const patientAPI = {
+  // Admin and Receptionist only
   getPatients: () => api.get('/patients'),
   createPatient: (data) => api.post('/patients', data),
+  
+  // Accessible by patient, their doctor, admin, or receptionist
   getPatient: (id) => api.get(`/patients/${id}`),
   updatePatient: (id, data) => api.put(`/patients/${id}`, data),
-  deletePatient: (id) => api.delete(`/patients/${id}`)
+  
+  // Admin only
+  deletePatient: (id) => api.delete(`/patients/${id}`),
+};
+
+// Appointment API
+export const appointmentAPI = {
+  // Admin and Receptionist only
+  getAppointments: (params = {}) => api.get('/appointments', { params }),
+  createAppointment: (data) => api.post('/appointments', data),
+  
+  // Get single appointment
+  getAppointment: (id) => api.get(`/appointments/${id}`),
+  
+  // Update appointment (admin and receptionist only)
+  updateAppointment: (id, data) => api.put(`/appointments/${id}`, data),
+  
+  // Delete appointment (admin only)
+  deleteAppointment: (id) => api.delete(`/appointments/${id}`),
+  
+  // Get doctor's appointments
+  getDoctorAppointments: (doctorId, params = {}) => 
+    api.get(`/doctors/${doctorId}/appointments`, { params }),
+};
+
+// Receptionist API
+export const receptionistAPI = {
+  // Admin only
+  createReceptionist: (data) => api.post('/receptionists', data),
+  getReceptionists: () => api.get('/receptionists'),
+  getReceptionist: (id) => api.get(`/receptionists/${id}`),
+  updateReceptionist: (id, data) => api.put(`/receptionists/${id}`, data),
+  deleteReceptionist: (id) => api.delete(`/receptionists/${id}`),
+  
+  // Receptionist-specific endpoints
+  assignDoctorToPatient: (patientId, doctorId) => 
+    api.put(`/patients/${patientId}/assign-doctor`, { doctorId }),
 };
 
 // Prescription API
 export const prescriptionAPI = {
   createPrescription: (data) => api.post('/prescriptions', data),
-  getPatientPrescriptions: (patientId) => api.get(`/patients/${patientId}/prescriptions`),
-  getDoctorPrescriptions: (doctorId) => api.get(`/doctors/${doctorId}/prescriptions`),
-};
-
-// Receptionist API
-export const receptionistAPI = {
-  // Patient management
-  getPatients: async () => {
-    try {
-      const response = await api.get('/receptionist/patients');
-      console.log('getPatients response:', response);
-      // Handle both response structures: response.data.data and response.data
-      return response.data?.data || response.data || [];
-    } catch (error) {
-      console.error('Error in getPatients:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      throw error;
-    }
-  },
-  createPatient: (data) => api.post('/receptionist/patients', data),
-  getPatient: (id) => api.get(`/receptionist/patients/${id}`),
-  
-  // Doctor management
-  getDoctors: async () => {
-    try {
-      console.log('Initiating doctors fetch from /receptionist/doctors');
-      const response = await api.get('/receptionist/doctors');
-      
-      console.log('Raw doctors API response:', {
-        status: response.status,
-        data: response.data,
-        isDataArray: Array.isArray(response.data),
-        hasDataProperty: 'data' in response.data,
-        dataKeys: Object.keys(response.data || {})
-      });
-      
-      // Handle different response formats
-      let doctors = [];
-      
-      // If response.data is an array, use it directly
-      if (Array.isArray(response.data)) {
-        doctors = response.data;
-      } 
-      // If response.data has a data property that's an array, use that
-      else if (response.data && Array.isArray(response.data.data)) {
-        doctors = response.data.data;
-      }
-      // If response.data has a success property and a data array, use that
-      else if (response.data && response.data.success && Array.isArray(response.data.data)) {
-        doctors = response.data.data;
-      }
-      // If response.data has a doctors array, use that
-      else if (response.data && Array.isArray(response.data.doctors)) {
-        doctors = response.data.doctors;
-      }
-      
-      console.log(`✅ Found ${doctors.length} doctors`, doctors);
-      return doctors;
-      
-    } catch (error) {
-      console.error('Detailed error in getDoctors:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-        config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          headers: error.config?.headers,
-          params: error.config?.params
-        },
-        response: {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          headers: error.response?.headers,
-          data: error.response?.data
-        }
-      });
-      
-      // Return empty array instead of throwing to prevent UI crash
-      return [];
-    }
-  },
-  
-  // Appointment management
-  getAppointments: async () => {
-    try {
-      const response = await api.get('/receptionist/appointments');
-      console.log('getAppointments response:', response);
-      // Handle both response structures: response.data.data and response.data
-      return response.data?.data || response.data || [];
-    } catch (error) {
-      console.error('Error in getAppointments:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      throw error;
-    }
-  },
-  createAppointment: (data) => api.post('/receptionist/appointments', data),
-  updateAppointment: (id, data) => api.put(`/receptionist/appointments/${id}`, data),
-  deleteAppointment: (id) => api.delete(`/receptionist/appointments/${id}`),
-  deletePatient: (id) => api.delete(`/receptionist/patients/${id}`),
+  // Add other prescription endpoints as needed
 };
 
 export default api;
