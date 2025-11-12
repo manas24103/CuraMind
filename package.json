@@ -29,6 +29,7 @@
     "express": "^5.1.0",
     "glightbox": "^3.3.1",
     "jsonwebtoken": "^9.0.2",
+    "lodash.debounce": "^4.0.8",
     "notistack": "^3.0.2",
     "openai": "^5.5.0",
     "react": "^19.2.0",
