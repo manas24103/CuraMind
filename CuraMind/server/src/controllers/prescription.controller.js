@@ -1,4 +1,3 @@
-import axios from 'axios';
 import Prescription from '../models/Prescription.js';
 /**
  * Generate AI prescription using OpenAI/Gemini
@@ -264,6 +263,36 @@ export const finalizePrescription = async (req, res) => {
 /**
  * Validate prescription content
  */
+export const getDoctorPrescriptions = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    
+    if (!doctorId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Doctor ID is required'
+      });
+    }
+
+    const prescriptions = await Prescription.find({ doctorId })
+      .populate('patientId', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: prescriptions,
+      count: prescriptions.length
+    });
+  } catch (error) {
+    console.error('Error fetching doctor prescriptions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch prescriptions',
+      error: error.message
+    });
+  }
+};
+
 export const validatePrescription = async (req, res) => {
   try {
     const { content } = req.body;

@@ -14,6 +14,7 @@ import doctorRoutes from './routes/doctor.routes.js';
 import patientRoutes from './routes/patient.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
 import receptionistRoutes from './routes/receptionist.routes.js';
+import prescriptionRoutes from './routes/prescription.routes.js';
 import errorHandler from './middleware/error.middleware.js';
 import connectDB from './config/db.js';
 
@@ -241,6 +242,7 @@ app.use('/api/doctors', doctorRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/receptionists', receptionistRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
 
 // Print all routes after they're registered in development
 if (process.env.NODE_ENV === 'development') {

@@ -12,15 +12,69 @@ const api = axios.create({
 // Add a request interceptor to add the auth token to requests
 api.interceptors.request.use(
   (config) => {
-    // Check for both doctorToken and token for backward compatibility
-    const token = localStorage.getItem('doctorToken') || localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Skip adding token for auth routes
+    if (config.url.includes('/auth/')) {
+      return config;
     }
+    
+    // Get the token from localStorage
+    const token = localStorage.getItem('doctorToken') || localStorage.getItem('token');
+    
+    if (token) {
+      // Ensure the token is properly formatted (remove any quotes or extra spaces)
+      const cleanToken = token.replace(/^['"]|['"]$/g, '').trim();
+      
+      // Log the token for debugging (first 10 chars only for security)
+      console.log(`[API] Adding token to ${config.method?.toUpperCase()} ${config.url}:`, 
+        cleanToken.substring(0, 10) + '...');
+      
+      // Set the Authorization header
+      config.headers = {
+        ...config.headers,
+        'Authorization': `Bearer ${cleanToken}`,
+        'Content-Type': 'application/json'
+      };
+    } else {
+      console.warn('[API] No authentication token found for request to:', config.url);
+    }
+    
     return config;
   },
   (error) => {
-    console.error('Request error:', error);
+    console.error('[API] Request interceptor error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor
+api.interceptors.response.use(
+  (response) => {
+    console.log('Response received:', {
+      url: response.config.url,
+      status: response.status,
+      data: response.data
+    });
+    return response;
+  },
+  (error) => {
+    console.error('Response error:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      message: error.message,
+      response: error.response?.data
+    });
+    
+    // Only handle 401 for non-prescription endpoints
+    if (error.response?.status === 401 && !error.config?.url.includes('/prescriptions/')) {
+      console.warn('Authentication error - clearing tokens and redirecting to login');
+      // Clear tokens
+      localStorage.removeItem('token');
+      localStorage.removeItem('doctorToken');
+      // Redirect to login
+      window.location.href = '/login';
+    }
+    
+    // Return a rejected promise with the error
     return Promise.reject(error);
   }
 );
@@ -108,6 +162,7 @@ export const doctorAPI = {
   getDoctorAppointments: (doctorId) => api.get(`/doctors/${doctorId}/appointments`),
   getDoctorPatients: (doctorId) => api.get(`/doctors/${doctorId}/patients`),
   getDashboardStats: (doctorId) => api.get(`/doctors/${doctorId}/stats`),
+  suggestDiagnosis: (symptoms) => api.post('/doctors/ai/suggest-diagnosis', { symptoms }),
 };
 
 // Patient API
@@ -119,6 +174,7 @@ export const patientAPI = {
   // Accessible by patient, their doctor, admin, or receptionist
   getPatient: (id) => api.get(`/patients/${id}`),
   updatePatient: (id, data) => api.put(`/patients/${id}`, data),
+  getRecentPatients: (doctorId) => api.get(`/patients/recent/${doctorId}`),
   
   // Admin only
   deletePatient: (id) => api.delete(`/patients/${id}`),
@@ -161,7 +217,95 @@ export const receptionistAPI = {
 // Prescription API
 export const prescriptionAPI = {
   createPrescription: (data) => api.post('/prescriptions', data),
-  // Add other prescription endpoints as needed
+  
+  suggestDiagnosis: async (requestData) => {
+    try {
+      // Extract and clean the data
+      const cleanData = {
+        symptoms: typeof requestData.symptoms === 'string' 
+          ? requestData.symptoms.trim() 
+          : JSON.stringify(requestData.symptoms || ''),
+        patientName: requestData.patientName || 'Temporary',
+        patientId: requestData.patientId || 'temp-id',
+        diagnosis: requestData.diagnosis || 'Temporary diagnosis',
+        medicalHistory: requestData.medicalHistory || '',
+        medications: requestData.medications || [],
+        instructions: requestData.instructions || ''
+      };
+      
+      console.log('[PrescriptionAPI] Sending diagnosis request with data:', cleanData);
+      
+      // Get the token
+      const token = (localStorage.getItem('doctorToken') || localStorage.getItem('token') || '').replace(/^['"]|['"]$/g, '').trim();
+      console.log('[PrescriptionAPI] Using token:', token ? `${token.substring(0, 10)}...` : 'No token found');
+      
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+      
+      const response = await api.post('/prescriptions/generate', cleanData, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        // Prevent the interceptor from handling 401 for this request
+        _handle401: false
+      });
+      
+      console.log('[PrescriptionAPI] Received response:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: response.data
+      });
+      
+      return response;
+      
+    } catch (error) {
+      console.error('[PrescriptionAPI] Error in suggestDiagnosis:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      
+      throw error; // Re-throw to let the component handle it
+    }
+  },
+  
+  generate: async (data) => {
+    console.log('[PrescriptionAPI] Generating prescription with data:', data);
+    try {
+      const token = (localStorage.getItem('doctorToken') || localStorage.getItem('token') || '').replace(/^['"]|['"]$/g, '').trim();
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+      
+      const response = await api.post('/prescriptions/generate', data, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        // Prevent the interceptor from handling 401 for this request
+        _handle401: false
+      });
+      
+      return response;
+      
+    } catch (error) {
+      console.error('[PrescriptionAPI] Error in generate:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      
+      // Don't logout on 401 for prescription generation
+      if (error.response?.status === 401) {
+        throw new Error('Your session has expired. Please log in again.');
+      }
+      
+      throw error;
+    }
+  }
 };
 
 export default api;

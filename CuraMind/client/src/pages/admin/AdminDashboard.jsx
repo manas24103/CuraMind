@@ -107,7 +107,6 @@ const AdminDashboard = () => {
         setReceptionists(receptionistsRes?.data?.data || []);
         
       } catch (error) {
-        console.error('Error in fetchDashboardData:', error);
         toast.error(error.response?.data?.message || 'Failed to load dashboard data');
       } finally {
         setIsLoading({ stats: false, doctors: false, patients: false, receptionists: false });
@@ -174,7 +173,6 @@ const AdminDashboard = () => {
       setIsEditingReceptionist(false);
       setCurrentReceptionistId(null);
     } catch (error) {
-      console.error('Error saving receptionist:', error);
       toast.error(error.response?.data?.message || "Failed to save receptionist");
     }
   };
@@ -249,7 +247,6 @@ const AdminDashboard = () => {
       setShowDoctorModal(false);
       toast.success("Doctor created successfully");
     } catch (err) {
-      console.error('Error creating doctor:', err);
       toast.error(err.response?.data?.message || "Failed to create doctor");
     }
   };
@@ -508,8 +505,8 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {patients.map(patient => (
-                      <tr key={patient._id} className="hover:bg-gray-50">
+                    {patients.map((patient, index) => (
+                      <tr key={patient?._id || `patient-${index}`} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">{patient.name}</td>
                         <td className="px-6 py-4 whitespace-nowrap">{patient.email}</td>
                         <td className="px-6 py-4 whitespace-nowrap">{patient.phone || 'N/A'}</td>
@@ -599,8 +596,8 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {filterItems(receptionists, searchTerm, 'receptionists').map(receptionist => (
-                    <tr key={receptionist._id} className="hover:bg-gray-50">
+                  {filterItems(receptionists, searchTerm, 'receptionists').map((receptionist, index) => (
+                    <tr key={receptionist?._id || `receptionist-${index}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">{receptionist.name}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{receptionist.email}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{receptionist.phone || 'N/A'}</td>
@@ -680,8 +677,8 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {filterItems(doctors, searchTerm, 'doctors').map((d) => (
-                    <tr key={d._id} className="hover:bg-gray-50">
+                  {filterItems(doctors, searchTerm, 'doctors').map((d, index) => (
+                    <tr key={d?._id || `doctor-${index}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">{d.name}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{d.email}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{d.specialization}</td>

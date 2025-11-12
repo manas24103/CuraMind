@@ -135,9 +135,6 @@ export const createAppointment = async (req, res) => {
         }
       });
     }
-
-    // Create new appointment with proper date/time handling
-    const appointmentDate = new Date(date);
     
     // Ensure time is properly formatted (HH:MM)
     const [hours, minutes] = time.split(':');
@@ -234,6 +231,52 @@ export const updateAppointment = async (req, res) => {
 };
 
 // Delete appointment
+// Get appointments for a specific doctor
+export const getDoctorAppointments = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const { status, startDate, endDate } = req.query;
+    
+    const filter = { doctor: doctorId };
+    
+    // Add status filter if provided
+    if (status) {
+      filter.status = status;
+    }
+    
+    // Add date range filter if provided
+    if (startDate || endDate) {
+      filter.appointmentDate = {};
+      if (startDate) {
+        filter.appointmentDate.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filter.appointmentDate.$lte = end;
+      }
+    }
+    
+    const appointments = await Appointment.find(filter)
+      .populate('patient', 'name phone email')
+      .populate('doctor', 'name specialization')
+      .sort({ appointmentDate: 1, startTime: 1 });
+    
+    res.status(200).json({
+      success: true,
+      count: appointments.length,
+      data: appointments,
+    });
+  } catch (error) {
+    console.error('Error fetching doctor appointments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching doctor appointments',
+      error: error.message,
+    });
+  }
+};
+
 export const deleteAppointment = async (req, res) => {
   try {
     const appointment = await Appointment.findByIdAndDelete(req.params.id);

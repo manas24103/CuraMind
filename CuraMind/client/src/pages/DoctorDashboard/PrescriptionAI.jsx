@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
-import { patientAPI } from '../../services/api';
+import { patientAPI, prescriptionAPI } from '../../services/api';
 import { doctorAPI } from '../../services/api';
+import { debounce } from 'lodash';
 
 const PrescriptionAI = () => {
+  const [suggestedDiagnoses, setSuggestedDiagnoses] = useState([]);
+  const [aiText, setAiText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [recentPatients, setRecentPatients] = useState([]);
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+
   const [form, setForm] = useState({ 
     patientName: '', 
+    patientId: null,
     symptoms: '',
     diagnosis: '',
     medication: '',
@@ -15,29 +24,34 @@ const PrescriptionAI = () => {
     notes: '',
     followUpDate: ''
   });
-  
-  const [aiText, setAiText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [recentPatients, setRecentPatients] = useState([]);
-  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
-  const [suggestedDiagnoses, setSuggestedDiagnoses] = useState([]);
 
   const doctorInfo = JSON.parse(localStorage.getItem('doctorInfo'));
   const doctorId = doctorInfo?._id;
 
   useEffect(() => {
     const fetchRecentPatients = async () => {
+      if (!doctorId) return;
+      
       try {
+        console.log('Fetching recent patients for doctor:', doctorId);
         const response = await patientAPI.getRecentPatients(doctorId);
-        setRecentPatients(response.data);
+        console.log('Recent patients response:', response);
+        
+        if (response && response.data && response.data.success && response.data.data) {
+          console.log('Setting recent patients:', response.data.data);
+          setRecentPatients(response.data.data);
+        } else {
+          console.warn('Unexpected response format:', response);
+          setRecentPatients([]);
+        }
       } catch (error) {
         console.error('Error fetching recent patients:', error);
+        setRecentPatients([]);
       }
     };
 
     fetchRecentPatients();
-  }, []);
+  }, [doctorId]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -45,28 +59,25 @@ const PrescriptionAI = () => {
       ...prev,
       [name]: value
     }));
-
-    // Show diagnosis suggestions when symptoms change
-    if (name === 'symptoms' && value.length > 3) {
-      suggestDiagnosis(value);
-    }
-  };
-
-  const suggestDiagnosis = async (symptoms) => {
-    try {
-      const response = await doctorAPI.post('/doctor/ai/suggest-diagnosis', { symptoms });
-      setSuggestedDiagnoses(response.data.suggestions || []);
-    } catch (error) {
-      console.error('Error getting diagnosis suggestions:', error);
-    }
   };
 
   const selectPatient = (patient) => {
-    setForm(prev => ({
-      ...prev,
-      patientName: `${patient.firstName} ${patient.lastName}`,
-      patientId: patient._id
-    }));
+    console.log('Selected patient:', patient);
+    const patientName = patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`.trim();
+    console.log('Setting patient name to:', patientName);
+    
+    setForm(prev => {
+      const newForm = {
+        ...prev,
+        patientName,
+        patientId: patient._id,
+        // Preserve other form fields
+        ...(prev.symptoms && { symptoms: prev.symptoms }),
+        ...(prev.diagnosis && { diagnosis: prev.diagnosis })
+      };
+      console.log('New form state:', newForm);
+      return newForm;
+    });
     setShowPatientDropdown(false);
   };
 
@@ -80,18 +91,94 @@ const PrescriptionAI = () => {
   };
 
   const handleGenerate = async () => {
+    // Validate form data
     if (!form.patientName || !form.symptoms) {
       toast.warning('Please enter patient name and symptoms');
       return;
     }
 
+    // Get token without trimming yet (we'll handle it in the API call)
+    const token = localStorage.getItem('doctorToken') || localStorage.getItem('token');
+    console.log('[PrescriptionAI] Current token:', token ? `${token.substring(0, 10)}...` : 'No token found');
+    
+    if (!token) {
+      toast.error('Please log in to continue');
+      // Don't redirect automatically, let the user log in
+      return;
+    }
+
     try {
       setLoading(true);
-      const response = await doctorAPI.post('/doctor/ai/generate-prescription', {
+      
+      // First, get diagnosis suggestions based on symptoms
+      if (form.symptoms && form.symptoms.length > 3) {
+        // Clean the symptoms input
+        const cleanSymptoms = typeof form.symptoms === 'string' 
+          ? form.symptoms.trim() 
+          : JSON.stringify(form.symptoms);
+          
+        console.log('[PrescriptionAI] Getting diagnosis suggestions for symptoms:', cleanSymptoms);
+        
+        try {
+          // Use the actual form data instead of hardcoded values
+          const response = await prescriptionAPI.suggestDiagnosis({
+            symptoms: cleanSymptoms,
+            patientName: form.patientName || 'Temporary',
+            patientId: form.patientId || 'temp-id',
+            diagnosis: form.diagnosis || 'Temporary diagnosis',
+            medicalHistory: form.medicalHistory || ''
+          });
+          
+          if (response?.data) {
+            if (response.data.suggestions) {
+              console.log('[PrescriptionAI] Received suggestions:', response.data.suggestions);
+              setSuggestedDiagnoses(response.data.suggestions);
+              toast.success('Diagnosis suggestions loaded');
+            } else if (response.data.error) {
+              console.warn('[PrescriptionAPI] Server returned error:', response.data.error);
+              throw new Error(response.data.error);
+            }
+          } else {
+            console.warn('[PrescriptionAPI] Invalid response format:', response);
+            throw new Error('Invalid response from server');
+          }
+          
+        } catch (error) {
+          console.error('[PrescriptionAI] Error getting diagnosis suggestions:', {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data
+          });
+          
+          // Only show error toast if it's not a 401 (handled by interceptor)
+          if (error.response?.status !== 401) {
+            const errorMessage = error.response?.data?.message || 
+                              error.message || 
+                              'Failed to get diagnosis suggestions';
+            toast.error(errorMessage);
+          }
+          
+          throw error; // Re-throw to be caught by the outer try-catch
+        }
+      }
+      
+      // Generate the prescription with form data
+      const prescriptionData = {
         patientName: form.patientName,
-        symptoms: form.symptoms,
-        diagnosis: form.diagnosis
-      });
+        patientId: form.patientId,
+        symptoms: typeof form.symptoms === 'string' 
+          ? form.symptoms.trim() 
+          : JSON.stringify(form.symptoms),
+        diagnosis: form.diagnosis,
+        medicalHistory: form.medicalHistory,
+        medications: form.medications || [],
+        instructions: form.instructions || ''
+      };
+      
+      console.log('[PrescriptionAI] Sending prescription data:', prescriptionData);
+      
+      // Make the API call with the actual form data
+      const response = await prescriptionAPI.generate(prescriptionData);
       
       const { prescription, structuredData } = response.data;
       setAiText(prescription);
@@ -151,19 +238,22 @@ const PrescriptionAI = () => {
   };
 
   const resetForm = () => {
-    setForm({
-      patientName: '',
+    setForm({ 
+      patientName: '', 
+      patientId: null,
       symptoms: '',
       diagnosis: '',
       medication: '',
       dosage: '',
       duration: '',
       notes: '',
-      followUpDate: ''
+      followUpDate: '',
+      prescriptionId: null
     });
     setAiText('');
     setIsEditing(false);
     setSuggestedDiagnoses([]);
+    setShowPatientDropdown(false);
   };
 
   return (
@@ -195,27 +285,38 @@ const PrescriptionAI = () => {
                 type="text"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 placeholder="Search or enter patient name"
-                value={form.patientName}
+                name="patientName"
+                value={form.patientName || ''}
                 onChange={(e) => {
+                  console.log('Patient name input changed:', e.target.value);
                   handleInputChange(e);
+                  setShowPatientDropdown(e.target.value.length > 0);
+                }}
+                onClick={() => {
+                  console.log('Input clicked, showing dropdown');
+                  setShowPatientDropdown(true);
+                }}
+                onFocus={() => {
+                  console.log('Input focused, showing dropdown');
                   setShowPatientDropdown(true);
                 }}
                 disabled={loading || isEditing}
                 autoComplete="off"
               />
-              {showPatientDropdown && recentPatients.length > 0 && !isEditing && (
-                <div className="absolute w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg z-50 max-h-60 overflow-y-auto">
+              {showPatientDropdown && recentPatients && recentPatients.length > 0 && !isEditing && (
+                <div className="absolute w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg z-[1000] max-h-60 overflow-y-auto">
                   {recentPatients.map(patient => (
                     <div 
                       key={patient._id}
                       className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
-                      onClick={() => {
-                        selectPatient(patient);
-                        setShowPatientDropdown(false);
-                      }}
+                      onClick={() => selectPatient(patient)}
                     >
-                      <div className="font-medium text-gray-900">{`${patient.firstName} ${patient.lastName}`}</div>
-                      <div className="text-sm text-gray-500">{patient.email || 'No email'}</div>
+                      <div className="font-medium text-gray-900">
+                        {patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`.trim()}
+                      </div>
+                      {patient.email && (
+                        <div className="text-sm text-gray-500">{patient.email}</div>
+                      )}
                     </div>
                   ))}
                 </div>

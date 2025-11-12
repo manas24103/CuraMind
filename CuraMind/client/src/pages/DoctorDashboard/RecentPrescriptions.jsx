@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import { format } from 'date-fns';
@@ -8,21 +8,42 @@ const RecentPrescriptions = () => {
   const [loading, setLoading] = useState(true);
   const [expandedPrescription, setExpandedPrescription] = useState(null);
 
-  useEffect(() => {
-    const fetchPrescriptions = async () => {
-      try {
-        const response = await api.get('prescriptions/recent');
-        setPrescriptions(response.data);
-      } catch (error) {
-        console.error('Error fetching prescriptions:', error);
-        toast.error('Failed to load prescriptions');
-      } finally {
-        setLoading(false);
+  const fetchPrescriptions = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Get the doctor's ID from localStorage
+      const doctorInfo = JSON.parse(localStorage.getItem('doctorInfo'));
+      const doctorId = doctorInfo?._id;
+      
+      if (!doctorId) {
+        throw new Error('Doctor ID not found. Please log in again.');
       }
-    };
-
-    fetchPrescriptions();
+      
+      // Fetch prescriptions for the specific doctor
+      const response = await api.get(`/prescriptions/doctor/${doctorId}`);
+      
+      // Make sure we have an array of prescriptions
+      const prescriptionsData = Array.isArray(response.data?.data) 
+        ? response.data.data 
+        : [];
+        
+      // Sort by date (newest first) and limit to 5 most recent
+      const recentPrescriptions = [...prescriptionsData]
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 5);
+        
+      setPrescriptions(recentPrescriptions);
+    } catch (error) {
+      console.error('Error fetching prescriptions:', error);
+      toast.error(error.response?.data?.message || 'Failed to load prescriptions');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchPrescriptions();
+  }, [fetchPrescriptions]);
 
   const formatDate = (dateString) => {
     try {
@@ -49,7 +70,8 @@ const RecentPrescriptions = () => {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Recent Prescriptions</h2>
         <button 
-          onClick={() => window.location.reload()}
+          onClick={() => fetchPrescriptions()}
+          disabled={loading}
           className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <svg 
@@ -70,7 +92,7 @@ const RecentPrescriptions = () => {
         </button>
       </div>
       
-      {prescriptions.length === 0 ? (
+      {!loading && prescriptions.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg">
           <svg 
             xmlns="http://www.w3.org/2000/svg" 

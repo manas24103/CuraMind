@@ -4,7 +4,8 @@ import {
   getAppointment,
   createAppointment,
   updateAppointment,
-  deleteAppointment
+  deleteAppointment,
+  getDoctorAppointments
 } from '../controllers/appointment.controller.js';
 import { authenticate, authorizeRoles } from '../middleware/auth.js';
 
@@ -15,7 +16,10 @@ router.use(authenticate);
 // Get all appointments (with optional query params for filtering)
 router.get('/', authorizeRoles('doctor', 'receptionist', 'admin'), getAllAppointments);
 
-// Get single appointment
+// Get doctor's appointments - Must come before /:id to avoid conflict
+router.get('/doctor/:doctorId', authorizeRoles('doctor', 'receptionist', 'admin'), getDoctorAppointments);
+
+// Get single appointment - This must come after more specific routes
 router.get('/:id', authorizeRoles('doctor', 'receptionist', 'admin'), getAppointment);
 
 // Create new appointment (receptionist and admin only)

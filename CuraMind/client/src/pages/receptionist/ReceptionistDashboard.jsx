@@ -147,15 +147,11 @@ const ReceptionistDashboard = () => {
   // ============================
   const fetchPatients = async () => {
     try {
-      console.log('Fetching patients...');
       const res = await patientAPI.getPatients();
-      console.log('Patients data:', res.data);
       // The patients array is in res.data.data
       const patientsData = res.data?.data || [];
-      console.log('Extracted patients:', patientsData);
       setPatients(Array.isArray(patientsData) ? patientsData : []);
     } catch (err) {
-      console.error('Error fetching patients:', err);
       toast.error(err.response?.data?.message || "Failed to load patients");
       setPatients([]); // Ensure patients is set to empty array on error
     }
@@ -163,9 +159,7 @@ const ReceptionistDashboard = () => {
 
   const fetchDoctors = async () => {
     try {
-      console.log('Fetching doctors...');
       const res = await doctorAPI.getDoctors();
-      console.log('Raw doctors response:', res);
       
       // Check the structure of the response
       let doctorsData = [];
@@ -182,8 +176,6 @@ const ReceptionistDashboard = () => {
         doctorsData = res.data.doctors;
       }
       
-      console.log('Processed doctors data:', doctorsData);
-      
       // Make sure each doctor has an _id field
       const validDoctors = doctorsData.map(doctor => ({
         ...doctor,
@@ -191,10 +183,8 @@ const ReceptionistDashboard = () => {
         _id: doctor._id || doctor.id
       })).filter(doctor => doctor._id); // Only keep doctors with an ID
       
-      console.log('Valid doctors with IDs:', validDoctors);
       setDoctors(validDoctors);
     } catch (err) {
-      console.error('Error fetching doctors:', err);
       toast.error(err.response?.data?.message || "Failed to load doctors");
       setDoctors([]);
     }
@@ -202,9 +192,7 @@ const ReceptionistDashboard = () => {
 
   const fetchAppointments = async () => {
     try {
-      console.log('Fetching appointments...');
       const res = await appointmentAPI.getAppointments();
-      console.log('Appointments API response:', res);
       
       // Handle different response structures
       let appointmentsData = [];
@@ -215,12 +203,17 @@ const ReceptionistDashboard = () => {
         appointmentsData = res.data.data;
       } else if (res.data && res.data.success && Array.isArray(res.data.appointments)) {
         appointmentsData = res.data.appointments;
+      } else if (res.data && Array.isArray(res.data)) {
+        appointmentsData = res.data; // Handle case where data is directly the array
       }
       
-      console.log('Processed appointments data:', appointmentsData);
-      setAppointments(appointmentsData);
+      const processedAppointments = appointmentsData.map(appt => ({
+        ...appt,
+        reason: appt.reason || appt.reason === '' ? appt.reason : 'General Checkup'
+      }));
+      
+      setAppointments(processedAppointments);
     } catch (err) {
-      console.error('Error fetching appointments:', err);
       toast.error(err.response?.data?.message || "Failed to load appointments");
       setAppointments([]);
     }
@@ -229,24 +222,17 @@ const ReceptionistDashboard = () => {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      console.log('Fetching all data...');
       await Promise.all([
         fetchPatients(),
         fetchDoctors(),
         fetchAppointments()
       ]);
     } catch (error) {
-      console.error('Error in fetchData:', error);
       toast.error('Failed to load data. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Log appointments state changes for debugging
-  useEffect(() => {
-    console.log('Appointments state updated:', appointments);
-  }, [appointments]);
 
   useEffect(() => {
     fetchData();
@@ -338,16 +324,11 @@ const ReceptionistDashboard = () => {
         },
         assignedDoctor: patientFormData.assignedDoctor || undefined
       };
-      
-      console.log('Sending patient data:', patientData);
-      
-      console.log('Creating patient with data:', patientData);
       await patientAPI.createPatient(patientData);
       toast.success("Patient added successfully!");
       setShowPatientModal(false);
       await fetchPatients(); // Refresh the patient list
     } catch (err) {
-      console.error('Error creating patient:', err);
       const errorMessage = err.response?.data?.message || "Failed to add patient";
       toast.error(errorMessage);
     } finally {
@@ -413,8 +394,6 @@ const ReceptionistDashboard = () => {
   };
 
   const handleBookAppointment = async () => {
-    console.log('Current appointment form:', appointmentForm);
-    
     if (!selectedPatient?._id) {
       toast.error("No patient selected");
       return;
@@ -437,11 +416,8 @@ const ReceptionistDashboard = () => {
       
       // Ensure time is properly formatted
       if (!appointmentForm.time) {
-        console.error('Time is missing in form data');
         throw new Error('Appointment time is required');
       }
-      
-      console.log('Processing time:', appointmentForm.time);
       
       // Format the date and time properly
       const [hours, minutes] = appointmentForm.time.split(':');
@@ -454,17 +430,13 @@ const ReceptionistDashboard = () => {
       
       // Prepare the appointment data - match server controller expected fields
       const appointmentData = {
-        patientId: selectedPatient._id,
-        doctorId: selectedPatient.assignedDoctor._id,
+        patient: selectedPatient._id,  // Changed from patientId to patient
+        doctor: selectedPatient.assignedDoctor._id,  // Changed from doctorId to doctor
         date: appointmentForm.date,
         time: appointmentForm.time,
         reason: appointmentForm.reason || "General Checkup",
         status: 'scheduled'  // Explicitly set status as required by the model
       };
-      
-      console.log('Final appointment data being sent:', JSON.stringify(appointmentData, null, 2));
-      
-      console.log('Creating appointment with data:', appointmentData);
       
       // Send the request to create the appointment
       const response = await appointmentAPI.createAppointment(appointmentData);
@@ -480,7 +452,6 @@ const ReceptionistDashboard = () => {
         throw new Error('No data in response');
       }
     } catch (err) {
-      console.error('Error creating appointment:', err);
       const errorMessage = err.response?.data?.message || 'Failed to book appointment';
       toast.error(errorMessage);
     } finally {
@@ -498,20 +469,8 @@ const ReceptionistDashboard = () => {
     const patientCopy = JSON.parse(JSON.stringify(patient));
     setEditingPatient(patientCopy);
     
-    // Update the form data with the patient's information
-    setPatientFormData({
-      ...DEFAULT_PATIENT_DATA,
-      ...patientCopy,
-      // Ensure address object exists and has all required fields
-      address: {
-        street: patientCopy.address?.street || '',
-        city: patientCopy.address?.city || '',
-        state: patientCopy.address?.state || '',
-        pincode: patientCopy.address?.pincode || ''
-      }
-    });
-    
-    setShowPatientModal(true);
+    // Don't show the patient form, just set the editing patient
+    // The modal for editing doctor will be shown based on editingPatient state
   };
 
   const handleUpdateDoctor = async () => {

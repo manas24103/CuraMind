@@ -435,89 +435,187 @@ export const updatePatient = async (req, res) => {
 };
 
 // Delete patient
-export const deletePatient = async (req, res) => {
-  
-  // Validate patient ID format
-  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-    return res.status(400).json({
+// Assign/Update doctor for a patient
+export const assignDoctor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { doctorId } = req.body;
+
+    // Validate patient ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid patient ID format',
+      });
+    }
+
+    // Validate doctor ID if provided
+    if (doctorId && !mongoose.Types.ObjectId.isValid(doctorId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid doctor ID format',
+      });
+    }
+
+    // Check if patient exists
+    const patient = await Patient.findById(id);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found',
+      });
+    }
+
+    // If doctorId is provided, check if doctor exists
+    if (doctorId) {
+      const doctor = await Doctor.findById(doctorId);
+      if (!doctor) {
+        return res.status(404).json({
+          success: false,
+          message: 'Doctor not found',
+        });
+      }
+    }
+
+    const previousDoctorId = patient.assignedDoctor;
+    
+    // Update patient's assigned doctor
+    patient.assignedDoctor = doctorId || null;
+    await patient.save();
+
+    // If there was a previous doctor, remove patient from their list
+    if (previousDoctorId) {
+      await Doctor.findByIdAndUpdate(
+        previousDoctorId,
+        { $pull: { patients: patient._id } }
+      );
+    }
+
+    // If new doctor is assigned, add patient to their list
+    if (doctorId) {
+      await Doctor.findByIdAndUpdate(
+        doctorId,
+        { $addToSet: { patients: patient._id } },
+        { new: true }
+      );
+    }
+
+    // Get updated patient with doctor details
+    const updatedPatient = await Patient.findById(id)
+      .populate('assignedDoctor', 'name email specialization')
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      message: doctorId ? 'Doctor assigned successfully' : 'Doctor unassigned successfully',
+      data: updatedPatient,
+    });
+  } catch (error) {
+    console.error('Error in assignDoctor:', error);
+    res.status(500).json({
       success: false,
-      message: 'Invalid patient ID format',
+      message: 'Error assigning doctor',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
+};
 
-  const session = await mongoose.startSession();
-  
+// Get recent patients for a specific doctor
+export const getRecentPatients = async (req, res) => {
   try {
-    await session.withTransaction(async () => {
-      // Find the patient to be deleted
-      const patient = await Patient.findById(req.params.id)
-        .select('assignedDoctor appointments')
-        .session(session);
-      
-      if (!patient) {
-        throw { status: 404, message: 'Patient not found' };
+    const { doctorId } = req.params;
+    const limit = parseInt(req.query.limit) || 5; // Default to 5 recent patients
+
+    // Find appointments for this doctor, sorted by most recent
+    const recentAppointments = await Appointment.find({ doctor: doctorId })
+      .sort({ date: -1 })
+      .limit(limit)
+      .populate('patient', 'name email phone')
+      .lean();
+
+    // Extract unique patients
+    const patientMap = new Map();
+    recentAppointments.forEach(appt => {
+      if (appt.patient && !patientMap.has(appt.patient._id.toString())) {
+        patientMap.set(appt.patient._id.toString(), {
+          ...appt.patient,
+          lastVisit: appt.date
+        });
       }
-      
-      // 1. Remove patient from doctor's patients array if assigned
-      if (patient.assignedDoctor) {
-        await Doctor.findByIdAndUpdate(
-          patient.assignedDoctor,
-          { $pull: { patients: patient._id } },
-          { session }
-        );
-      }
-      
-      // 2. Delete all appointments for this patient
-      const { deletedCount: deletedAppointments } = await Appointment.deleteMany(
-        { patient: patient._id },
-        { session }
-      );
-      
-      // 3. Delete the patient
-      const deletedPatient = await Patient.findByIdAndDelete(
-        req.params.id,
-        { session }
-      );
-      
-      if (!deletedPatient) {
-        throw { status: 404, message: 'Patient not found' };
-      }
-      
-      // Commit the transaction
-      await session.commitTransaction();
-      
-      
-      // Return success response
-      res.status(200).json({
-        success: true,
-        message: 'Patient deleted successfully',
-        data: {
-          patientId: deletedPatient._id,
-          deletedAppointments
-        },
+    });
+
+    const recentPatients = Array.from(patientMap.values());
+
+    res.status(200).json({
+      success: true,
+      count: recentPatients.length,
+      data: recentPatients
+    });
+  } catch (error) {
+    console.error('Error fetching recent patients:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching recent patients',
+      error: error.message
+    });
+  }
+};
+
+export const deletePatient = async (req, res) => {
+  try {
+    // Find the patient and populate the assignedDoctor field
+    const patient = await Patient.findById(req.params.id)
+      .populate('assignedDoctor');
+    
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
       });
+    }
+    
+    // 1. Remove patient from doctor's patients array if assigned
+    if (patient.assignedDoctor) {
+      await Doctor.findByIdAndUpdate(
+        patient.assignedDoctor._id,
+        { $pull: { patients: patient._id } }
+      );
+    }
+    
+    // 2. Delete all appointments for this patient
+    const { deletedCount: deletedAppointments } = await Appointment.deleteMany(
+      { patient: patient._id }
+    );
+    
+    // 3. Delete the patient
+    const deletedPatient = await Patient.findByIdAndDelete(req.params.id);
+    
+    if (!deletedPatient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+    
+    // Return success response
+    res.status(200).json({
+      success: true,
+      message: 'Patient deleted successfully',
+      data: {
+        patientId: deletedPatient._id,
+        deletedAppointments
+      },
     });
     
   } catch (error) {
-    // If there's an error, abort the transaction
-    await session.abortTransaction();
-    
     console.error('Error in deletePatient:', error);
-    
-    // Handle custom errors from transaction
-    if (error.status) {
-      return res.status(error.status).json({
-        success: false,
-        message: error.message || 'Error deleting patient',
-      });
-    }
     
     // Handle specific error types
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
         message: 'Invalid patient ID format',
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
     
@@ -529,9 +627,5 @@ export const deletePatient = async (req, res) => {
         ? error.message 
         : 'An error occurred while deleting the patient'
     });
-    
-  } finally {
-    // End the session
-    await session.endSession();
   }
 };
