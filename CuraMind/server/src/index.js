@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -124,10 +125,10 @@ app.use(cors({
 
 // Default configuration
 const config = {
-  databaseUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/meditrust',
-  jwtSecret: process.env.JWT_SECRET || 'dev-secret-key',
-  sessionSecret: process.env.SESSION_SECRET || 'dev-session-secret',
-  nodeEnv: process.env.NODE_ENV || 'development'
+  databaseUrl: process.env.MONGO_URI,
+  jwtSecret: process.env.JWT_SECRET,
+  sessionSecret: process.env.SESSION_SECRET,
+  nodeEnv: process.env.NODE_ENV
 };
 
 // Schedule cleanup for temporary patients

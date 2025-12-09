@@ -1,6 +1,41 @@
 import Prescription from '../models/Prescription.js';
+import OpenAI from 'openai';
+
+// List of models to try in order of preference
+const modelCandidates = [
+  'gpt-4o',        // high-end (omni) — may be available
+  'gpt-4.1',       // newer GPT-4.1 family (if your account has it)
+  'gpt-4-turbo',   // previous high-end model
+  'gpt-3.5-turbo'  // widely available fallback
+];
+
+// Initialize OpenAI client
+const openai = new OpenAI({ 
+  apiKey: process.env.OPENAI_API_KEY 
+});
+
+// Helper function to find the best available model
+async function pickModel() {
+  try {
+    const res = await openai.models.list();
+    const available = res.data.map(m => m.id);
+    for (const candidate of modelCandidates) {
+      if (available.includes(candidate)) {
+        console.log(`✅ Found available model: ${candidate}`);
+        return candidate;
+      }
+    }
+    // Fallback to first available model if none of our preferred ones are found
+    console.warn(`⚠️ No preferred models found. Available models: ${available.join(', ')}`);
+    return available[0] || 'gpt-3.5-turbo';
+  } catch (error) {
+    console.error('Error fetching available models, falling back to gpt-3.5-turbo:', error.message);
+    return 'gpt-3.5-turbo';
+  }
+}
+
 /**
- * Generate AI prescription using OpenAI/Gemini
+ * Generate AI prescription using OpenAI
  */
 export const generateAIPrescription = async (req, res) => {
   try {
@@ -14,31 +49,30 @@ export const generateAIPrescription = async (req, res) => {
       });
     }
 
-    // Call OpenAI API
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a medical assistant AI that generates safe, professional prescriptions based on symptoms and patient history.',
-          },
-          {
-            role: 'user',
-            content: `Symptoms: ${symptoms}. Medical history: ${medicalHistory || 'N/A'}. Generate a professional prescription with medicine name, dosage, and precautions.`,
-          },
-        ],
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    // Get the best available model
+    const model = await pickModel();
+    console.log(`🔧 Using model: ${model}`);
 
-    const aiText = response.data.choices[0].message.content;
+    // Call OpenAI API
+    const completion = await openai.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a medical assistant AI that generates safe, professional prescriptions based on symptoms and patient history. Always include medicine name, dosage, frequency, and special instructions.',
+        },
+        {
+          role: 'user',
+          content: `Symptoms: ${symptoms}. 
+                   Medical history: ${medicalHistory || 'N/A'}. 
+                   Generate a professional prescription.`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+
+    const aiText = completion.choices[0].message.content;
 
     const prescription = await Prescription.create({
       patientId,
