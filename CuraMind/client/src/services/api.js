@@ -2,8 +2,8 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api', // Point directly to the backend server
-  withCredentials: true, // Include cookies in requests
+  baseURL: import.meta.env.VITE_API_BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },

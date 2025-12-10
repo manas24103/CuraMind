@@ -44,7 +44,7 @@ const corsOptions = {
     'http://localhost:3000', 
     'http://localhost:5173',
     'http://localhost:3001',
-    'https://your-production-domain.com' // Replace with your production domain
+    'https://cura-mind-nine.vercel.app' // Replace with your production domain
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
@@ -117,7 +117,7 @@ app.use(compression());
 
 // CORS Configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || ['http://localhost:5173', 'http://localhost:3000'],
+  origin: process.env.FRONTEND_URL || ['http://localhost:5173', 'http://localhost:3000',"http://cura-mind-nine.vercel.app"],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
