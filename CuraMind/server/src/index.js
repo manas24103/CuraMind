@@ -49,28 +49,35 @@ const allowedOrigins = [
 
 // Log all incoming requests
 app.use((req, res, next) => {
-  const timestamp = new Date().toISOString();
-  const method = req.method.padEnd(7);
-  const url = req.originalUrl;
-  const ip = req.ip || req.connection.remoteAddress;
-  
-  console.log(`[${timestamp}] ${method} ${url} from ${ip}`);
-  console.log('Headers:', req.headers);
-  console.log('Body:', req.body);
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
   next();
+});
+
+// Enable CORS pre-flight
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, x-auth-token, token');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400');
+  }
+  res.sendStatus(204);
 });
 
 // Enable CORS for all routes
 app.use(
   cors({
     origin: (origin, callback) => {
-      // allow requests with no origin (like mobile apps, curl, Postman)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (like mobile apps, curl, Postman)
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -87,9 +94,6 @@ app.use(
     maxAge: 86400 // 24 hours
   })
 );
-
-// Enable CORS pre-flight for all routes
-app.options('*', cors());
 
 // Handle preflight requests
 app.use((req, res, next) => {
