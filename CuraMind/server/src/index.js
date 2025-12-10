@@ -39,26 +39,13 @@ if (!process.env.NODE_ENV) {
 }
 
 // CORS configuration
-const corsOptions = {
-  origin: [
-    'http://localhost:3000', 
-    'http://localhost:5173',
-    'http://localhost:3001',
-    'https://cura-mind-nine.vercel.app' // Replace with your production domain
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'x-auth-token',
-    'token'
-  ],
-  exposedHeaders: ['x-auth-token'],
-  credentials: true,
-  optionsSuccessStatus: 204,
-  maxAge: 86400 // 24 hours
-};
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'https://cura-mind-nine.vercel.app',
+  'https://cura-rust.onrender.com'
+];
 
 // Log all incoming requests
 app.use((req, res, next) => {
@@ -73,11 +60,36 @@ app.use((req, res, next) => {
   next();
 });
 
-// Enable CORS pre-flight
-app.options('*', cors(corsOptions));
-
 // Enable CORS for all routes
-app.use(cors(corsOptions));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow requests with no origin (like mobile apps, curl, Postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Not allowed by CORS'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'x-auth-token',
+      'token'
+    ],
+    exposedHeaders: ['x-auth-token'],
+    credentials: true,
+    optionsSuccessStatus: 204,
+    maxAge: 86400 // 24 hours
+  })
+);
+
+// Enable CORS pre-flight for all routes
+app.options('*', cors());
 
 // Handle preflight requests
 app.use((req, res, next) => {
