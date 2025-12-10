@@ -38,38 +38,15 @@ if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'development';
 }
 
-// CORS configuration
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:3001',
-  'https://cura-mind-nine.vercel.app',
-  'https://cura-rust.onrender.com'
-];
+// CORS configuration is now handled in cors-setup.js
+import setupCors from './cors-setup.js';
+setupCors(app);
 
-// Log incoming origins for debugging
+// Log incoming requests for debugging
 app.use((req, res, next) => {
   console.log('CORS incoming origin:', req.headers.origin);
   next();
 });
-
-// Configure CORS
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow requests with no origin (like mobile apps, curl, Postman)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.log('❌ Blocked by CORS:', origin);
-      return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-  })
-);
 
 // Request logging middleware (disabled in production)
 if (process.env.NODE_ENV !== 'production') {
