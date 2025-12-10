@@ -17,6 +17,7 @@ import receptionistRoutes from './routes/receptionist.routes.js';
 import prescriptionRoutes from './routes/prescription.routes.js';
 import errorHandler from './middleware/error.middleware.js';
 import connectDB from './config/db.js';
+import setupCors from './cors-setup.js';
 
 // Initialize express
 const app = express();
@@ -37,45 +38,11 @@ if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'development';
 }
 
-// Allowed origins
-const allowedOrigins = [
-  'http://localhost:3000',           // dev
-  'http://localhost:5173',
-  'http://localhost:3001',
-  'https://cura-mind-nine.vercel.app', // your Vercel frontend
-  'https://cura-rust.onrender.com',   // your Render backend (for API calls from frontend)
-  'https://cura-mind.vercel.app'      // your other Vercel domain
-];
+// Setup CORS
+setupCors(app);
 
 // Trust first proxy (important when behind load balancer like Render/Heroku)
 app.set('trust proxy', 1);
-
-// Manual CORS middleware
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  console.log('CORS middleware origin:', origin);
-
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-  }
-
-  res.header(
-    'Access-Control-Allow-Methods',
-    'GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD'
-  );
-  res.header(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-Requested-With'
-  );
-
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
-  }
-
-  next();
-});
 
 // Request logging middleware (disabled in production)
 if (process.env.NODE_ENV !== 'production') {
