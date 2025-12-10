@@ -7,7 +7,6 @@ import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import { v4 as uuid4 } from 'uuid';
-import cors from 'cors';
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';
@@ -38,13 +37,43 @@ if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'development';
 }
 
-// CORS configuration is now handled in cors-setup.js
-import setupCors from './cors-setup.js';
-setupCors(app);
+// Allowed origins
+const allowedOrigins = [
+  'http://localhost:3000',           // dev
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'https://cura-mind-nine.vercel.app', // your Vercel frontend
+  'https://cura-rust.onrender.com',   // your Render backend (for API calls from frontend)
+  'https://cura-mind.vercel.app'      // your other Vercel domain
+];
 
-// Log incoming requests for debugging
+// Trust first proxy (important when behind load balancer like Render/Heroku)
+app.set('trust proxy', 1);
+
+// Manual CORS middleware
 app.use((req, res, next) => {
-  console.log('CORS incoming origin:', req.headers.origin);
+  const origin = req.headers.origin;
+  console.log('CORS middleware origin:', origin);
+
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+
+  res.header(
+    'Access-Control-Allow-Methods',
+    'GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD'
+  );
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Requested-With'
+  );
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
   next();
 });
 
@@ -100,30 +129,22 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
 // Session configuration
 app.use(session({
-  secret: config.sessionSecret,
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGO_URI,
+    autoRemove: 'native', // Remove expired sessions automatically
+    ttl: 14 * 24 * 60 * 60 // Session TTL in seconds (14 days)
+  }),
   cookie: {
     secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 24 * 14, // 14 days
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  },
-  genid: () => uuid4(),
-  store: MongoStore.create({
-    mongoUrl: config.databaseUrl,
-    mongoOptions: {},
-    ttl: 24 * 60 * 60, // 24 hours
-    touchAfter: 24 * 3600, // 24 hours
-    autoRemove: 'native' // Remove expired sessions automatically
-  })
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+  }
 }));
 
 // Trust first proxy (if behind a reverse proxy like nginx)

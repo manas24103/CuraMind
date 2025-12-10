@@ -1,49 +1,45 @@
-import axios from 'axios';
-import { toast } from 'react-toastify';
+import axios from "axios";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000/api";
+const API_BASE_URL =
+  process.env.REACT_APP_API_BASE_URL || "http://localhost:5000/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
-// Add a request interceptor to add the auth token to requests
+// Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
     // Skip adding token for auth routes
-    if (config.url.includes('/auth/')) {
-      return config;
+    if (!config.url.includes('/auth/')) {
+      const token = localStorage.getItem('doctorToken') || localStorage.getItem('token');
+      if (token) {
+        const cleanToken = token.replace(/^['"]|['"]$/g, '').trim();
+        config.headers.Authorization = `Bearer ${cleanToken}`;
+      }
     }
-    
-    // Get the token from localStorage
-    const token = localStorage.getItem('doctorToken') || localStorage.getItem('token');
-    
-    if (token) {
-      // Ensure the token is properly formatted (remove any quotes or extra spaces)
-      const cleanToken = token.replace(/^['"]|['"]$/g, '').trim();
-      
-      // Log the token for debugging (first 10 chars only for security)
-      console.log(`[API] Adding token to ${config.method?.toUpperCase()} ${config.url}:`, 
-        cleanToken.substring(0, 10) + '...');
-      
-      // Set the Authorization header
-      config.headers = {
-        ...config.headers,
-        'Authorization': `Bearer ${cleanToken}`,
-        'Content-Type': 'application/json'
-      };
-    } else {
-      console.warn('[API] No authentication token found for request to:', config.url);
-    }
-    
     return config;
   },
   (error) => {
-    console.error('[API] Request interceptor error:', error);
+    console.error('Request error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error("API Response error:", {
+      url: error.config?.url,
+      status: error.response?.status,
+      message: error.message,
+      data: error.response?.data,
+    });
     return Promise.reject(error);
   }
 );
