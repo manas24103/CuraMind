@@ -310,25 +310,32 @@ const ReceptionistDashboard = () => {
       
       // Prepare the patient data with required fields
       const patientData = {
-        name: patientFormData.name.trim(),
-        age: parseInt(patientFormData.age, 10) || 0,
-        gender: patientFormData.gender || 'male',
-        phone: patientFormData.phone.trim(),
-        email: patientFormData.email.trim(),
-        bloodGroup: patientFormData.bloodGroup || undefined,
-        address: {
-          street: patientFormData.address.street.trim(),
-          city: patientFormData.address.city.trim(),
-          state: patientFormData.address.state.trim(),
-          pincode: patientFormData.address.pincode.trim()
-        },
-        assignedDoctor: patientFormData.assignedDoctor || undefined
+        patient: {  // Wrap the patient data in a patient object
+          name: patientFormData.name.trim(),
+          age: parseInt(patientFormData.age, 10) || 0,
+          gender: patientFormData.gender || 'male',
+          phone: patientFormData.phone.trim(),
+          email: patientFormData.email.trim(),
+          bloodGroup: patientFormData.bloodGroup || undefined,
+          address: {
+            street: patientFormData.address.street.trim(),
+            city: patientFormData.address.city.trim(),
+            state: patientFormData.address.state.trim(),
+            pincode: patientFormData.address.pincode.trim()
+          },
+          assignedDoctor: patientFormData.assignedDoctor || undefined,
+          medicalHistory: []
+        }
       };
-      await patientAPI.createPatient(patientData);
+      
+      const response = await patientAPI.createPatient(patientData);
+      console.log('Patient creation response:', response);
+      
       toast.success("Patient added successfully!");
       setShowPatientModal(false);
       await fetchPatients(); // Refresh the patient list
     } catch (err) {
+      console.error('Error creating patient:', err);
       const errorMessage = err.response?.data?.message || "Failed to add patient";
       toast.error(errorMessage);
     } finally {
