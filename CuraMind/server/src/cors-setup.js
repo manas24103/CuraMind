@@ -1,40 +1,55 @@
 import cors from 'cors';
 
 const setupCors = (app) => {
-  // Allowed origins - add your production URL here
+  // Allowed origins - add your production URLs here
   const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:3001',
     'https://cura-mind-nine.vercel.app',
     'https://cura-rust.onrender.com',
-    'https://cura-mind.vercel.app'
+    'https://cura-mind.vercel.app',
+    'https://cura-mind.vercel.app/'
   ];
 
+  // CORS configuration
   const corsOptions = {
-    origin: function (origin, callback) {
+    origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) {
-        console.warn('CORS: No origin header present');
+        console.warn('CORS: No origin header present - allowing with wildcard');
         return callback(null, true);
       }
+
+      // Check if the origin is in the allowed list (case-insensitive)
+      const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
       
-      if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      if (allowedOrigins.some(allowed => 
+        allowed.endsWith('/') 
+          ? allowed.slice(0, -1).toLowerCase() === normalizedOrigin.toLowerCase()
+          : allowed.toLowerCase() === normalizedOrigin.toLowerCase()
+      )) {
         return callback(null, true);
-      } else {
-        console.warn(`CORS: Blocked request from origin: ${origin}`);
-        return callback(new Error('Not allowed by CORS'), false);
       }
+
+      // For development, log and allow all origins
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`CORS: Allowing non-whitelisted origin in development: ${origin}`);
+        return callback(null, true);
+      }
+
+      // In production, only allow whitelisted origins
+      console.warn(`CORS: Blocked request from origin: ${origin}`);
+      return callback(new Error(`Not allowed by CORS. Origin ${origin} is not in the allowed list.`), false);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
       'X-Requested-With',
       'Accept',
       'Origin',
-      'X-Requested-With',
       'X-Auth-Token',
       'X-CSRF-Token',
       'X-Forwarded-For',
@@ -42,34 +57,34 @@ const setupCors = (app) => {
     ],
     exposedHeaders: [
       'Content-Length',
-      'X-Foo',
-      'X-Bar',
-      'Set-Cookie',
-      'Authorization'
+      'Content-Type',
+      'Authorization',
+      'Set-Cookie'
     ],
     maxAge: 86400, // 24 hours
     preflightContinue: false,
-    optionsSuccessStatus: 204
+    optionsSuccessStatus: 200
   };
 
-  // Apply CORS to all routes
+  // Apply CORS middleware with our configuration
   app.use(cors(corsOptions));
   
   // Handle preflight requests
   app.options('*', cors(corsOptions));
-  
+
   // Log CORS headers for debugging
   app.use((req, res, next) => {
-    console.log('CORS Headers:', {
-      origin: req.headers.origin,
+    console.log('CORS Request:', {
+      url: req.originalUrl,
       method: req.method,
+      origin: req.headers.origin,
       'access-control-request-headers': req.headers['access-control-request-headers'],
-      'access-control-request-method': req.headers['access-control-request-method']
+      'access-control-request-method': req.headers['access-control-request-method'],
+      'user-agent': req.headers['user-agent']
     });
     next();
   });
 };
 
 export { setupCors };
-
 export default setupCors;
