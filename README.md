@@ -12,7 +12,7 @@ A modern web application for managing doctor appointments and patient records wi
 
 ## Tech Stack
 
-- Frontend: React + TypeScript + Material-UI
+- Frontend: React + Tailwind Css
 - Backend: Node.js + Express + TypeScript
 - Database: MongoDB
 - AI Integration: OpenAI GPT-4 for prescription suggestions
